@@ -4,9 +4,9 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware # Import CORS middleware
 from bson import ObjectId
 from fastapi.encoders import ENCODERS_BY_TYPE
-from app.models.prompt import PyObjectId
+from app.models.common import PyObjectId
 
-# Add custom encoder for BSON ObjectId to FastAPI's known types
+# Add custom encoder for BSON ObjectId and our subclass
 ENCODERS_BY_TYPE[ObjectId] = str
 ENCODERS_BY_TYPE[PyObjectId] = str
 

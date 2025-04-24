@@ -484,15 +484,23 @@ export function PromptEditor({ prompt, onSaveSuccess }: PromptEditorProps) {
         return;
       }
 
-      const savedPrompt = await response.json();
+      const savedPrompt: Prompt = await response.json();
       console.log("Prompt saved successfully:", savedPrompt);
       toast.success("Prompt saved successfully!");
 
-      // --- Call the success callback if provided --- M
+      // --- MODIFIED: Update local state after save/update --- M
+      // Update the version state locally to reflect backend change
+      if (savedPrompt.version) {
+        setVersion(savedPrompt.version);
+      }
+      // If we are updating (not creating), potentially update other states too?
+      // For now, just version as it's auto-incremented.
+      // --- End MODIFICATION ---
+
+      // Call the success callback if provided (triggers library refresh)
       if (onSaveSuccess) {
         onSaveSuccess();
       }
-      // --- End callback --- M
 
     } catch (error) {
       console.error("Error saving prompt:", error);
@@ -542,18 +550,26 @@ export function PromptEditor({ prompt, onSaveSuccess }: PromptEditorProps) {
         throw new Error(errorDetail);
       }
 
-      const restoredPrompt = await response.json();
+      const restoredPrompt: Prompt = await response.json();
       console.log("Prompt restored successfully:", restoredPrompt);
       toast.success("Prompt restored successfully!");
 
-      // Close history dialog and trigger library refresh
+      // --- Update Editor State Directly --- M
+      setName(restoredPrompt.name || "");
+      setDescription(restoredPrompt.description || "");
+      setSections(restoredPrompt.sections || []);
+      setSelectedTags(restoredPrompt.tags || []);
+      setSelectedProject(restoredPrompt.project);
+      setSelectedLanguage(restoredPrompt.language);
+      setIsProduction(restoredPrompt.isProduction || false);
+      setVersion(restoredPrompt.version || "1.0");
+      // --- End State Update ---
+
+      // Close history dialog and trigger library refresh (still useful for library view)
       setShowHistoryDialog(false);
       if (onSaveSuccess) {
-        onSaveSuccess(); // This will remount editor via MainLayout key change
+        onSaveSuccess();
       }
-       // Optionally, update the editor state directly, but remounting is simpler
-       // setName(restoredPrompt.name);
-       // ... set other states ...
 
     } catch (error) {
         console.error("Error restoring prompt:", error);
@@ -572,15 +588,9 @@ export function PromptEditor({ prompt, onSaveSuccess }: PromptEditorProps) {
           <Button variant="outline" size="sm" onClick={() => setShowPreview(!showPreview)}>
             {showPreview ? "Hide Preview" : "Show Preview"}
           </Button>
-          <div className="flex items-center gap-1 border rounded-md px-2 py-1">
-            <span className="text-sm text-muted-foreground">Version:</span>
-            <Input
-              type="text"
-              value={version}
-              onChange={(e) => setVersion(e.target.value)}
-              className="h-6 w-16 text-sm border-none focus-visible:ring-0 focus-visible:ring-offset-0 px-1"
-              aria-label="Prompt Version"
-            />
+          <div className="flex items-center border rounded-md px-2 py-1 h-9">
+            <span className="text-sm text-muted-foreground mr-1">Version:</span>
+            <span className="text-sm font-medium">{version}</span>
           </div>
           <Button
             variant="outline"

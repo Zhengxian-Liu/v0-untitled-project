@@ -34,10 +34,16 @@ async def _ensure_unique_production_prompt(
         if exclude_prompt_id:
             find_filter["_id"] = {"$ne": exclude_prompt_id}
 
+        # --- Add Log --- M
+        update_doc = {"$set": {"isProduction": False, "updated_at": datetime.utcnow()}}
+        logger.debug(f"[_ensure_unique_production_prompt] Finding with filter: {find_filter}")
+        logger.debug(f"[_ensure_unique_production_prompt] Updating matching with doc: {update_doc}")
+        # --- End Log ---
+
         # Find and update existing production prompts for this combo
         update_result = await db[PROMPT_COLLECTION].update_many(
             find_filter,
-            {"$set": {"isProduction": False, "updated_at": datetime.utcnow()}}
+            update_doc # Use the logged update_doc
         )
         if update_result.modified_count > 0:
             logger.info(f"Set isProduction=False for {update_result.modified_count} other prompts in project '{project}' / language '{language}'.")
@@ -53,11 +59,12 @@ async def create_prompt(
     prompt_in: PromptCreate,
     db: AsyncIOMotorDatabase = Depends(get_database),
 ):
-    """Create a new prompt entry in the database."""
+    """Create a new prompt entry in the database, sets version to 1.0."""
     prompt_dict = prompt_in.model_dump(exclude_unset=True)
     now = datetime.utcnow()
     prompt_dict["created_at"] = now
     prompt_dict["updated_at"] = now
+    prompt_dict["version"] = "1.0" # Explicitly set initial version
 
     # Ensure sections are stored (text is optional in model now)
     if "sections" not in prompt_dict or not prompt_dict["sections"]:
@@ -167,7 +174,7 @@ async def update_prompt(
     prompt_update: PromptUpdate,
     db: AsyncIOMotorDatabase = Depends(get_database),
 ):
-    """Update an existing prompt, saving the previous version to history."""
+    """Update an existing prompt, save history, and auto-increment version."""
     update_data = prompt_update.model_dump(exclude_unset=True)
 
     if not update_data:
@@ -175,25 +182,31 @@ async def update_prompt(
             status_code=status.HTTP_400_BAD_REQUEST, detail="No update data provided"
         )
 
-    # --- Save current state to history BEFORE updating --- M
+    # --- Save current state to history --- M
     current_prompt_doc = await db[PROMPT_COLLECTION].find_one({"_id": prompt_id})
     if not current_prompt_doc:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Prompt with ID {prompt_id} not found for history saving.",
-        )
-
+        raise HTTPException(status_code=404, detail=f"Prompt {prompt_id} not found")
     try:
-        # Prepare history data (exclude DB _id, add prompt_id)
+        # ... (save to history logic) ...
         history_data = Prompt.model_validate(current_prompt_doc).model_dump(exclude={"id"})
         history_data["prompt_id"] = prompt_id
         await db[HISTORY_COLLECTION].insert_one(history_data)
         logger.info(f"Saved history record for prompt {prompt_id}")
     except Exception as e:
-        # Log error but proceed with update? Or fail update?
-        # Let's log and proceed for now.
         logger.error(f"Failed to save history for prompt {prompt_id}: {e}")
     # --- End history saving ---
+
+    # --- Auto-increment version --- M
+    current_version_str = current_prompt_doc.get("version", "1.0")
+    try:
+        # Assuming format like "X.0", extract X, increment, format back
+        current_major_version = int(float(current_version_str)) # Handle potential X.Y format leniently
+        next_version = f"{current_major_version + 1}.0"
+    except ValueError:
+        logger.warning(f"Could not parse version '{current_version_str}' for prompt {prompt_id}. Defaulting next version to '1.0'")
+        next_version = "1.0" # Fallback if parsing fails
+    update_data["version"] = next_version # Force the new version
+    # --- End version increment ---
 
     update_data["updated_at"] = datetime.utcnow()
 
@@ -215,12 +228,14 @@ async def update_prompt(
     # --- End uniqueness check ---
 
     # Perform the actual update
-    # --- Add Log --- M
-    logger.debug(f"Updating prompt {prompt_id} with data (before set): {update_data}")
-    # --- End Log ---
+    # --- Add Logs and Explicit Dict Conversion --- M
+    update_data_dict = dict(update_data) # Ensure it's a standard dict
+    logger.info(f"[update_prompt] Attempting update for {prompt_id}. Update dict type: {type(update_data_dict)}")
+    logger.debug(f"[update_prompt] Update content (wrapped in $set): {{'$set': {update_data_dict}}}")
+    # --- End Logs --- M
     update_result = await db[PROMPT_COLLECTION].update_one(
         {"_id": prompt_id},
-        {"$set": update_data} # Correctly use $set
+        {"$set": update_data_dict} # Use the ensured dict
     )
 
     if update_result.matched_count == 0:

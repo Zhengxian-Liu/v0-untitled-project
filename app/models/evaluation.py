@@ -3,7 +3,9 @@ from typing import Optional, List
 from datetime import datetime
 from bson import ObjectId
 
-from .prompt import PyObjectId # Reuse the ObjectId helper
+from .common import PyObjectId
+
+from .prompt import PromptSection # Assuming PyObjectId is now defined in prompt.py (adjust if moved)
 
 # --- Evaluation Result Models ---
 
@@ -42,13 +44,15 @@ class EvaluationResultUpdate(BaseModel):
 
 class EvaluationResultInDB(EvaluationResultBase):
     """Model representing an evaluation result stored in MongoDB."""
-    id: PyObjectId = Field(default_factory=PyObjectId, alias="_id")
+    id: PyObjectId = Field(
+        default_factory=PyObjectId,
+        validation_alias="_id"
+    )
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
     model_config = ConfigDict(
-        populate_by_name=True,
         arbitrary_types_allowed=True,
-        json_encoders={ObjectId: str},
+        json_encoders={ObjectId: str, PyObjectId: str},
          json_schema_extra={"example": {
             "_id": "6eb7cf5a86d9755df3a6c5a1",
             "evaluation_id": "5eb7cf5a86d9755df3a6c593",
@@ -91,16 +95,18 @@ class EvaluationBase(BaseModel):
 
 class EvaluationInDB(EvaluationBase):
     """Model representing an evaluation session stored in MongoDB."""
-    id: PyObjectId = Field(default_factory=PyObjectId, alias="_id")
+    id: PyObjectId = Field(
+        default_factory=PyObjectId,
+        validation_alias="_id"
+    )
     created_at: datetime = Field(default_factory=datetime.utcnow)
     completed_at: Optional[datetime] = None # Mark when completed
     # Store the input data for the background task
     test_set_data: List[EvaluationRequestData] = Field(..., description="The test data used for this evaluation.")
 
     model_config = ConfigDict(
-        populate_by_name=True,
         arbitrary_types_allowed=True,
-        json_encoders={ObjectId: str},
+        json_encoders={ObjectId: str, PyObjectId: str},
          json_schema_extra={"example": {
             "_id": "5eb7cf5a86d9755df3a6c593",
             "prompt_id": "4eb7cf5a86d9755df3a6c582",

@@ -11,6 +11,8 @@ import type { EvaluationSessionSummary, EvaluationSession } from "@/types";
 // Import the modal component
 import { ViewSessionDetailsModal } from './view-session-details-modal';
 
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "/api/v1";
+
 export function SavedSessionsList() {
     const [sessions, setSessions] = useState<EvaluationSessionSummary[]>([]);
     const [isLoading, setIsLoading] = useState(true);
@@ -28,7 +30,7 @@ export function SavedSessionsList() {
             setIsLoading(true);
             setError(null);
             try {
-                const response = await fetch("http://localhost:8000/api/v1/evaluation-sessions/");
+                const response = await fetch(`${API_BASE_URL}/evaluation-sessions/`);
                 if (!response.ok) {
                     let errorDetail = `HTTP error! status: ${response.status}`;
                     try {
@@ -54,6 +56,8 @@ export function SavedSessionsList() {
             }
         };
 
+        // Add console log
+        console.log("SavedSessionsList: Fetching from URL:", `${API_BASE_URL}/evaluation-sessions/`);
         fetchSessions();
     }, []); // Run once on mount
 
@@ -64,7 +68,7 @@ export function SavedSessionsList() {
         setSelectedSessionDetails(null); // Clear previous
         setIsViewModalOpen(false); // Close initially
         try {
-            const response = await fetch(`http://localhost:8000/api/v1/evaluation-sessions/${sessionId}`);
+            const response = await fetch(`${API_BASE_URL}/evaluation-sessions/${sessionId}`);
             if (!response.ok) {
                  let errorDetail = `HTTP error! status: ${response.status}`;
                  try {

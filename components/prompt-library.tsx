@@ -6,7 +6,9 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge"
 import { CheckCircle2 } from "lucide-react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import type { Prompt } from "@/types"
+import type { Prompt, EvaluationSessionSummary } from "@/types"
+
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "/api/v1";
 
 const availableLanguages = [
   { id: "all", name: "All Languages" },
@@ -40,7 +42,9 @@ export function PromptLibrary({ onPromptSelect, currentLanguage }: PromptLibrary
       setIsLoading(true)
       setError(null)
       try {
-        const response = await fetch("http://localhost:8000/api/v1/prompts/");
+        const fetchUrl = `${API_BASE_URL}/prompts/`;
+        console.log("PromptLibrary: Fetching from URL:", fetchUrl);
+        const response = await fetch(fetchUrl);
         if (!response.ok) {
           let errorDetail = `HTTP error! status: ${response.status}`;
           try {

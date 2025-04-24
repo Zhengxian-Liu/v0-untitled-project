@@ -15,6 +15,8 @@ import type { Prompt, EvaluationResult } from "@/types"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { toast } from "sonner"
 
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "/api/v1"
+
 // Mock data for AI models
 const mockModels = [
   { id: "1", name: "GPT-4" },
@@ -138,7 +140,7 @@ export function EvaluationPanel({ currentLanguage }: EvaluationPanelProps) {
         // Fetch prompts relevant to the current language context?
         // Adjust API endpoint if filtering by language is possible/needed
         // const fetchUrl = `/api/v1/prompts/?language=${currentLanguage}`;
-        const fetchUrl = `http://localhost:8000/api/v1/prompts/`; // Fetch all for now
+        const fetchUrl = `${API_BASE_URL}/prompts/`;
 
         const response = await fetch(fetchUrl);
         if (!response.ok) {
@@ -190,7 +192,7 @@ export function EvaluationPanel({ currentLanguage }: EvaluationPanelProps) {
 
     setColumns(prev => prev.map(col => col.id === columnId ? { ...col, isLoadingVersions: true, versionsError: null } : col));
     try {
-        const url = `http://localhost:8000/api/v1/prompts/base/${basePromptId}/versions`;
+        const url = `${API_BASE_URL}/prompts/base/${basePromptId}/versions`;
         const response = await fetch(url);
         if (!response.ok) {
             throw new Error(`Failed to fetch versions: ${response.statusText}`);
@@ -271,7 +273,7 @@ export function EvaluationPanel({ currentLanguage }: EvaluationPanelProps) {
     // --- Call Backend API --- M
     console.log(`Updating score for result ${resultId} to ${score}`);
     try {
-        const response = await fetch(`http://localhost:8000/api/v1/evaluations/results/${resultId}`, {
+        const response = await fetch(`${API_BASE_URL}/evaluations/results/${resultId}`, {
             method: "PUT",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ score: score })
@@ -306,7 +308,7 @@ export function EvaluationPanel({ currentLanguage }: EvaluationPanelProps) {
       // TODO: Implement debouncing for comment input later
       console.log(`Updating comment for result ${resultId}`);
       try {
-          const response = await fetch(`http://localhost:8000/api/v1/evaluations/results/${resultId}`, {
+          const response = await fetch(`${API_BASE_URL}/evaluations/results/${resultId}`, {
               method: "PUT",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ comment: comment })
@@ -384,7 +386,7 @@ export function EvaluationPanel({ currentLanguage }: EvaluationPanelProps) {
     let latestStatus = evaluationStatus;
     try {
         // 1. Check completion status first (this also returns the eval object)
-        const statusResponse = await fetch(`http://localhost:8000/api/v1/evaluations/${evalId}/check_completion`, { method: 'PATCH' });
+        const statusResponse = await fetch(`${API_BASE_URL}/evaluations/${evalId}/check_completion`, { method: 'PATCH' });
         if (statusResponse.ok) {
             const evalData = await statusResponse.json();
             latestStatus = evalData.status;
@@ -395,7 +397,7 @@ export function EvaluationPanel({ currentLanguage }: EvaluationPanelProps) {
         }
 
         // 2. Fetch the results
-        const resultsResponse = await fetch(`http://localhost:8000/api/v1/evaluations/${evalId}/results`);
+        const resultsResponse = await fetch(`${API_BASE_URL}/evaluations/${evalId}/results`);
         if (!resultsResponse.ok) {
              throw new Error(`Fetch results failed: ${resultsResponse.statusText}`);
         }
@@ -512,7 +514,7 @@ export function EvaluationPanel({ currentLanguage }: EvaluationPanelProps) {
     console.log("Evaluation Request Body:", requestBody);
 
     try {
-        const response = await fetch(`http://localhost:8000/api/v1/evaluations/`, {
+        const response = await fetch(`${API_BASE_URL}/evaluations/`, {
             method: "POST",
             headers: {
                 "Content-Type": "application/json",
@@ -631,7 +633,7 @@ export function EvaluationPanel({ currentLanguage }: EvaluationPanelProps) {
     // 2. Call Backend
     try {
       // --- FIX: Use Absolute Backend URL --- M
-      const backendUrl = "http://localhost:8000/api/v1/evaluation-sessions";
+      const backendUrl = `${API_BASE_URL}/evaluation-sessions`;
       const response = await fetch(backendUrl, {
       // --- End FIX ---
         method: "POST",

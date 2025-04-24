@@ -182,6 +182,8 @@ interface PromptEditorProps {
 // --- Constant for Select placeholder value --- M
 const SELECT_PLACEHOLDER_VALUE = "--none--";
 
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "/api/v1";
+
 // Use the updated Props type
 export function PromptEditor({ prompt, onSaveSuccess, currentLanguage }: PromptEditorProps) {
   const [name, setName] = useState("")
@@ -233,15 +235,18 @@ export function PromptEditor({ prompt, onSaveSuccess, currentLanguage }: PromptE
     }
   }, [prompt])
 
-  // --- Restore Effect to check for existing production prompt (using fixed language 'en') --- M
+  // Effect to check for existing production prompt
   useEffect(() => {
+    const HARDCODED_LANGUAGE = "en";
     const fetchCurrentProductionPrompt = async () => {
       if (selectedProject && currentLanguage) {
         setIsLoadingProductionCheck(true);
         setCurrentProductionPrompt(null); // Reset before fetching
         try {
-          const url = `http://localhost:8000/api/v1/prompts/production/?project=${encodeURIComponent(selectedProject)}&language=${encodeURIComponent(currentLanguage)}`;
+          // --- Use Env Var for URL --- M
+          const url = `${API_BASE_URL}/prompts/production/?project=${encodeURIComponent(selectedProject)}&language=${encodeURIComponent(currentLanguage)}`;
           const response = await fetch(url);
+          // --- End Use --- M
 
           if (response.ok) {
             const data: Prompt = await response.json();
@@ -264,7 +269,6 @@ export function PromptEditor({ prompt, onSaveSuccess, currentLanguage }: PromptE
     };
     fetchCurrentProductionPrompt();
   }, [selectedProject, currentLanguage]);
-  // --- End Restore Effect ---
 
   const handleTagToggle = (tag: string) => {
     if (selectedTags.includes(tag)) {
@@ -425,8 +429,8 @@ export function PromptEditor({ prompt, onSaveSuccess, currentLanguage }: PromptE
     const isCreatingNew = !prompt; // True if prompt prop is null
     const method = isCreatingNew ? "POST" : "PUT";
     const url = isCreatingNew
-      ? "http://localhost:8000/api/v1/prompts/"
-      : `http://localhost:8000/api/v1/prompts/${prompt.id}`; // Use prompt.id for PUT base
+      ? `${API_BASE_URL}/prompts/`
+      : `${API_BASE_URL}/prompts/${prompt.id}`; // Use prompt.id for PUT base
 
     // Payload preparation - needs slight adjustment based on method
     const basePayload = {

@@ -1,24 +1,48 @@
 services:
+  nginx:
+    image: nginx:stable-alpine
+    container_name: promptcraft_nginx
+    ports:
+      - "80:80" # Expose Nginx port 80 on the host
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro # Mount the config file read-only
+    depends_on:
+      - frontend
+      - backend
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+      args:
+        # Point to the backend service within the Docker network
+        NEXT_PUBLIC_API_URL: /api/v1
+    container_name: promptcraft_frontend
+    # No volume mount needed for production runner stage generally
+    depends_on:
+      - backend # Frontend depends on backend being available
+    restart: unless-stopped # Added restart policy
+
   backend:
-    build: .
+    build:
+      context: . # Use default Dockerfile in this context
+      # dockerfile: Dockerfile # Can be explicit if needed
     container_name: promptcraft_backend
     command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
     volumes:
       - .:/app  # Mount current directory to /app in container for live reload
-    ports:
-      - "8000:8000"
     env_file:
       - .env # Load environment variables from .env file
     depends_on:
       - database
     # Ensure MONGO_URL uses the service name 'database' when running inside Compose
     # Example .env entry for Compose: MONGO_URL=mongodb://database:27017/promptcraft_db
+    restart: unless-stopped # Added restart policy
 
   database:
     image: mongo:latest
     container_name: promptcraft_mongo_db
-    ports:
-      - "27017:27017" # Map host port 27017 to container port 27017
     volumes:
       - mongo_data:/data/db # Persist data using a named volume
     # Optional: Add healthcheck for MongoDB
@@ -28,6 +52,7 @@ services:
     #   timeout: 10s
     #   retries: 5
     #   start_period: 30s
+    restart: unless-stopped # Added restart policy
 
 volumes:
   mongo_data:

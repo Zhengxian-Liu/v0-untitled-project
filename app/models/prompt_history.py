@@ -3,30 +3,9 @@ from typing import Optional, List
 from datetime import datetime
 from bson import ObjectId
 
-# Assuming PyObjectId helper is in common or defined elsewhere
-# from .common import PyObjectId
-# Re-define PyObjectId here if not in common.py yet
-class PyObjectId(ObjectId):
-    @classmethod
-    def __get_validators__(cls):
-        yield cls.validate
-
-    @classmethod
-    def validate(cls, v, _validation_info=None):
-        if not ObjectId.is_valid(v):
-            raise ValueError("Invalid ObjectId")
-        return ObjectId(v)
-
-    @classmethod
-    def __get_pydantic_core_schema__(cls, source_type, handler):
-        from pydantic_core import core_schema
-        return core_schema.no_info_plain_validator_function(cls.validate)
-
-    @classmethod
-    def __get_pydantic_json_schema__(cls, core_schema, handler):
-        json_schema = handler(core_schema)
-        json_schema.update(type='string', example='5eb7cf5a86d9755df3a6c593')
-        return json_schema
+# --- MODIFIED: Import from common --- M
+from .common import PyObjectId
+# --- End MODIFICATION ---
 
 # Re-define PromptSection here for self-containment or import from prompt model
 class PromptSection(BaseModel):

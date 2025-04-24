@@ -3,16 +3,18 @@ from typing import Optional, List
 from datetime import datetime
 from bson import ObjectId
 
-from .prompt_history import PyObjectId
+# --- MODIFIED: Import PyObjectId from common --- M
+from .common import PyObjectId
+from .prompt_history import PromptSection # Import section from history or define here?
+# Let's define PromptSection here as it's core to Prompt
+# --- End MODIFICATION ---
 
-# Define PromptSection structure first
+# Define PromptSection structure here
 class PromptSection(BaseModel):
-    # Allow Pydantic to handle id generation if needed, but keep it simple
-    # id: str = Field(default_factory=lambda: str(ObjectId())) # Frontend might generate temporary IDs
-    id: str # Frontend should provide a unique ID for the section within the prompt
-    type: str = Field(..., description="Type of the section (e.g., role, context, custom).")
-    name: str = Field(..., description="Display name of the section.")
-    content: str = Field("", description="Text content of the section.")
+    id: str
+    type: str
+    name: str
+    content: str
 
 # Helper Class for MongoDB ObjectId compatibility with Pydantic
 class PyObjectId(ObjectId):
@@ -79,18 +81,17 @@ class PromptInDBBase(PromptBase):
     """Base model for Prompt stored in MongoDB, includes DB-specific fields."""
     id: PyObjectId = Field(
         default_factory=PyObjectId,
-        alias="_id",
-        serialization_alias="id"
+        validation_alias="_id"
     )
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
 
     model_config = ConfigDict(
-        populate_by_name=True,
         arbitrary_types_allowed=True,
-        json_encoders={ObjectId: str},
-        # Update example if needed
-        # json_schema_extra={"example": { ... }}
+        json_encoders={
+            ObjectId: str,
+            PyObjectId: str
+        },
     )
 
 class Prompt(PromptInDBBase):

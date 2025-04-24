@@ -12,6 +12,7 @@ import { Sidebar } from "@/components/sidebar"
 import { Button } from "@/components/ui/button"
 import { PlusCircle } from "lucide-react"
 import type { Prompt } from "@/types"
+import { SavedSessionsList } from "@/components/saved-sessions-list"
 
 export function MainLayout({ children }: { children: React.ReactNode }) {
   const [activeTab, setActiveTab] = useState("library")
@@ -50,11 +51,14 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
                   <TabsTrigger value="library">Prompt Library</TabsTrigger>
                   <TabsTrigger value="editor" disabled={activeTab !== 'editor' && !selectedPrompt}>Prompt Editor</TabsTrigger>
                   <TabsTrigger value="evaluate">Evaluate</TabsTrigger>
+                  <TabsTrigger value="saved-sessions">Saved Sessions</TabsTrigger>
                 </TabsList>
-                <Button onClick={handleNewPrompt} className="ml-auto">
-                  <PlusCircle className="mr-2 h-4 w-4" />
-                  New Prompt
-                </Button>
+                {(activeTab === 'library' || activeTab === 'editor') && (
+                    <Button onClick={handleNewPrompt} className="ml-auto">
+                      <PlusCircle className="mr-2 h-4 w-4" />
+                      New Prompt
+                    </Button>
+                )}
               </div>
               <TabsContent value="library" className="mt-6">
                 <PromptLibrary
@@ -72,6 +76,9 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
               </TabsContent>
               <TabsContent value="evaluate" className="mt-6">
                 <EvaluationPanel currentLanguage={currentLanguage} />
+              </TabsContent>
+              <TabsContent value="saved-sessions" className="mt-6">
+                <SavedSessionsList />
               </TabsContent>
             </Tabs>
           </div>

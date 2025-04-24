@@ -66,11 +66,12 @@ export type ProductionPrompt = {
   promptName: string
 }
 
-// --- Evaluation Result Type (Frontend) --- M
-// Mimics the backend EvaluationResult model
+// --- Evaluation Types (Consolidated) --- M
+
+// For results fetched from the backend during/after an evaluation run
 export type EvaluationResult = {
-  id: string; // Result row ID
-  evaluation_id: string; // Parent evaluation session ID
+  id: string; // Result row ID from evaluation_results collection
+  evaluation_id: string;
   prompt_id: string; // Specific prompt version ID used
   source_text: string;
   model_output: string | null;
@@ -78,6 +79,51 @@ export type EvaluationResult = {
   score: number | null;
   comment: string | null;
   created_at: string;
-  // analysis?: string; // Maybe add later if backend provides it
 }
-// --- End NEW Type ---
+
+// For representing saved evaluation sessions
+
+export type EvaluationSessionConfigColumn = {
+  basePromptId: string | null;
+  selectedVersionId: string | null;
+  modelId: string | null;
+}
+
+export type EvaluationSessionTestItem = {
+  sourceText: string;
+  referenceText: string | null;
+}
+
+export type EvaluationSessionConfig = {
+  columns: EvaluationSessionConfigColumn[];
+  testSet: EvaluationSessionTestItem[];
+  project: string | null;
+  language: string | null;
+}
+
+export type EvaluationSessionResultItem = { // Renamed to avoid conflict
+  promptId: string | null;
+  sourceText: string;
+  referenceText: string | null;
+  modelOutput: string | null;
+  score: number | null;
+  comment: string | null;
+}
+
+export type EvaluationSession = {
+  id: string; // Saved Session ID
+  session_name: string;
+  session_description: string | null;
+  saved_at: string;
+  config: EvaluationSessionConfig;
+  results: EvaluationSessionResultItem[]; // Use renamed type
+}
+
+export type EvaluationSessionSummary = {
+  id: string;
+  session_name: string;
+  session_description: string | null;
+  saved_at: string;
+}
+
+// --- End Evaluation Types ---

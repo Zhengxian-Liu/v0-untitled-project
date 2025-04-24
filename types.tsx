@@ -65,3 +65,19 @@ export type ProductionPrompt = {
   promptId: string
   promptName: string
 }
+
+// --- Evaluation Result Type (Frontend) --- M
+// Mimics the backend EvaluationResult model
+export type EvaluationResult = {
+  id: string; // Result row ID
+  evaluation_id: string; // Parent evaluation session ID
+  prompt_id: string; // Specific prompt version ID used
+  source_text: string;
+  model_output: string | null;
+  reference_text: string | null;
+  score: number | null;
+  comment: string | null;
+  created_at: string;
+  // analysis?: string; // Maybe add later if backend provides it
+}
+// --- End NEW Type ---

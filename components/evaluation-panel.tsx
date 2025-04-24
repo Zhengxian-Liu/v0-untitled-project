@@ -8,11 +8,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Download, Upload, Plus, Play, Trash2, Eye, EyeOff, Settings } from "lucide-react"
+import { Download, Upload, Plus, Play, Trash2, Eye, EyeOff, Settings, Loader2 } from "lucide-react"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-import type { Prompt } from "@/types"
+import type { Prompt, EvaluationResult } from "@/types"
 import { ScrollArea } from "@/components/ui/scroll-area"
+import { toast } from "sonner"
 
 // Mock data for AI models
 const mockModels = [
@@ -30,13 +31,19 @@ const mockTestSets = [
   { id: "4", name: "Game Dialogue Samples" },
 ]
 
-// Type for evaluation column
+// --- Update EvaluationColumn Type --- M
 type EvaluationColumn = {
-  id: string
-  promptId: string
-  modelId: string
-  showPrompt: boolean
+  id: string;
+  basePromptId: string | null; // ID of the base prompt selected
+  selectedVersionId: string | null; // Specific version ID selected
+  modelId: string; // Keep model selection
+  showPrompt: boolean;
+  // State for version dropdown specific to this column
+  isLoadingVersions?: boolean;
+  versionsError?: string | null;
+  availableVersions?: Prompt[];
 }
+// --- End Update ---
 
 // Type for result item
 type ResultItem = {
@@ -52,77 +59,48 @@ type ResultItem = {
   }[]
 }
 
-// Mock results data
-const initialMockResults: ResultItem[] = [
-  {
-    id: "1",
-    sourceText: "The ancient sword glows with mysterious energy.",
-    referenceTranslation: "古代の剣は神秘的なエネルギーで輝いている。",
-    outputs: [
-      {
-        columnId: "col1",
-        text: "古代の剣は神秘的なエネルギーで輝いている。",
-        score: 5,
-        comment: "Excellent translation that captures the mystical tone",
-        analysis:
-          "1. Source Text Analysis\n- Fantasy/game item description\n- Key elements: ancient sword, mysterious energy, glow\n\n2. Translation Quality\n- Accurately conveys all key elements\n- Maintains the mystical tone of the original",
-      },
-      {
-        columnId: "col2",
-        text: "古の剣が不思議なエネルギーを放っている。",
-        score: 4,
-        comment: "Good alternative phrasing",
-        analysis:
-          "1. Source Text Analysis\n- Fantasy/game item description\n- Key elements: ancient sword, mysterious energy, glow\n\n2. Translation Quality\n- Uses alternative but valid phrasing\n- Slightly different nuance but maintains core meaning",
-      },
-    ],
-  },
-  {
-    id: "2",
-    sourceText: "Defeat the guardian to unlock the hidden treasure chest.",
-    referenceTranslation: "守護者を倒して隠された宝箱を解放しよう。",
-    outputs: [
-      {
-        columnId: "col1",
-        text: "守護者を倒して隠された宝箱を解放しよう。",
-        score: 5,
-        comment: "Perfect game instruction translation",
-        analysis:
-          "1. Source Text Analysis\n- Game instruction/objective\n- Key elements: defeat guardian, unlock, hidden treasure chest\n\n2. Translation Quality\n- Uses appropriate game terminology\n- Maintains the instructional tone",
-      },
-      {
-        columnId: "col2",
-        text: "守護者を倒すと、隠された宝箱が開放されます。",
-        score: 4,
-        comment: "More informational than instructional",
-        analysis:
-          "1. Source Text Analysis\n- Game instruction/objective\n- Key elements: defeat guardian, unlock, hidden treasure chest\n\n2. Translation Quality\n- Changes from imperative to informational tone\n- All key information is preserved",
-      },
-    ],
-  },
-]
-
 // --- Define Props --- M
 interface EvaluationPanelProps {
   currentLanguage: string;
 }
 
+// --- Define type for editable test row state --- M
+interface TestRow {
+  id: string; // Frontend temporary ID
+  sourceText: string;
+  referenceText: string;
+}
+
+// --- Define types locally if not imported --- M
+interface EvaluationRequestData {
+  source_text: string;
+  reference_text: string | null;
+}
+// --- End Define ---
+
+// --- Constant for Select placeholder value --- M
+const SELECT_PLACEHOLDER_VALUE = "--none--";
+
 export function EvaluationPanel({ currentLanguage }: EvaluationPanelProps) {
   const [selectedProject, setSelectedProject] = useState("genshin")
   const [showIdealOutputs, setShowIdealOutputs] = useState(false)
-  const [testSetType, setTestSetType] = useState("standardized")
+  const [testSetType, setTestSetType] = useState("manual") // Default to manual row input
   const [selectedTestSet, setSelectedTestSet] = useState("1")
-  const [manualInput, setManualInput] = useState("")
   const [isLoading, setIsLoading] = useState(false)
 
-  // State for evaluation columns
+  // --- Update Initial Columns State --- M
   const [columns, setColumns] = useState<EvaluationColumn[]>([
-    { id: "col1", promptId: "", modelId: "1", showPrompt: false },
-    { id: "col2", promptId: "", modelId: "1", showPrompt: false },
+    { id: "col1", basePromptId: null, selectedVersionId: null, modelId: "1", showPrompt: false, availableVersions: [], isLoadingVersions: false },
+    { id: "col2", basePromptId: null, selectedVersionId: null, modelId: "1", showPrompt: false, availableVersions: [], isLoadingVersions: false },
   ])
+  // --- End Update ---
 
   // State for results
-  const [results, setResults] = useState<ResultItem[]>(initialMockResults)
+  const [results, setResults] = useState<ResultItem[]>([])
+  const [evaluationResults, setEvaluationResults] = useState<EvaluationResult[]>([])
+  const [currentEvaluationId, setCurrentEvaluationId] = useState<string | null>(null)
+  const [evaluationStatus, setEvaluationStatus] = useState<string | null>(null)
+  const [isLoadingResults, setIsLoadingResults] = useState(false)
 
   // Projects data
   const projects = [
@@ -136,6 +114,20 @@ export function EvaluationPanel({ currentLanguage }: EvaluationPanelProps) {
   const [isLoadingPrompts, setIsLoadingPrompts] = useState(true);
   const [promptsError, setPromptsError] = useState<string | null>(null);
   // --- End Prompt State ---
+
+  // --- State for Editable Test Rows --- M
+  const [testRows, setTestRows] = useState<TestRow[]>([
+      { id: Date.now().toString(), sourceText: "", referenceText: "" }
+  ]);
+  // --- End State ---
+
+  // --- Add Pending State --- M
+  const [pendingOutputs, setPendingOutputs] = useState<Set<string>>(new Set());
+  // --- End Pending State ---
+
+  // --- Add Polling State --- M
+  const [pollingIntervalId, setPollingIntervalId] = useState<NodeJS.Timeout | null>(null);
+  // --- End Polling State ---
 
   // --- Fetch Prompts Effect --- M
   useEffect(() => {
@@ -155,16 +147,20 @@ export function EvaluationPanel({ currentLanguage }: EvaluationPanelProps) {
         const data = await response.json();
         setAvailablePrompts(data as Prompt[]);
 
-        // --- Initialize default columns with fetched prompts --- M
+        // --- Initialize default columns with basePromptId --- M
         if (data.length > 0) {
             setColumns((prevColumns) => {
-                // Only update if default columns haven't been changed by user yet
-                // Or maybe always update if prompts change? For now, initialize.
-                if (prevColumns.every(col => col.promptId === "")) {
+                if (prevColumns.every(col => col.basePromptId === null)) {
+                    const defaultBaseId1 = data[0].base_prompt_id; // Use base_prompt_id
+                    const defaultVersionId1 = data[0].id;
+                    const defaultBaseId2 = data[1]?.base_prompt_id ?? defaultBaseId1;
+                    const defaultVersionId2 = data[1]?.id ?? defaultVersionId1;
+                    // Fetch versions for default selections immediately?
+                    fetchVersionsForColumn("col1", defaultBaseId1);
+                    fetchVersionsForColumn("col2", defaultBaseId2);
                     return [
-                        { id: "col1", promptId: data[0].id, modelId: "1", showPrompt: false },
-                        // Use second prompt if available, else first again
-                        { id: "col2", promptId: data[1]?.id ?? data[0].id, modelId: "1", showPrompt: false },
+                        { id: "col1", basePromptId: defaultBaseId1, selectedVersionId: defaultVersionId1, modelId: "1", showPrompt: false, availableVersions: [], isLoadingVersions: false },
+                        { id: "col2", basePromptId: defaultBaseId2, selectedVersionId: defaultVersionId2, modelId: "1", showPrompt: false, availableVersions: [], isLoadingVersions: false },
                     ]
                 }
                 return prevColumns;
@@ -184,120 +180,135 @@ export function EvaluationPanel({ currentLanguage }: EvaluationPanelProps) {
   }, []); // Run once on mount
   // --- End Fetch Prompts ---
 
-  // Handle adding a new column
+  // --- Function to Fetch Versions for a Column --- M
+  const fetchVersionsForColumn = async (columnId: string, basePromptId: string | null) => {
+    if (!basePromptId) {
+        // Clear versions if base prompt is deselected
+        setColumns(prev => prev.map(col => col.id === columnId ? { ...col, availableVersions: [], isLoadingVersions: false, versionsError: null } : col));
+        return;
+    }
+
+    setColumns(prev => prev.map(col => col.id === columnId ? { ...col, isLoadingVersions: true, versionsError: null } : col));
+    try {
+        const url = `http://localhost:8000/api/v1/prompts/base/${basePromptId}/versions`;
+        const response = await fetch(url);
+        if (!response.ok) {
+            throw new Error(`Failed to fetch versions: ${response.statusText}`);
+        }
+        const versionsData = await response.json();
+        setColumns(prev => prev.map(col => col.id === columnId ? { ...col, availableVersions: versionsData as Prompt[], isLoadingVersions: false } : col));
+    } catch (err) {
+        console.error(`Error fetching versions for column ${columnId}:`, err);
+        const errorMsg = err instanceof Error ? err.message : "Unknown error";
+        setColumns(prev => prev.map(col => col.id === columnId ? { ...col, versionsError: errorMsg, isLoadingVersions: false, availableVersions: [] } : col));
+        toast.error(`Failed to load versions: ${errorMsg}`);
+    }
+  };
+  // --- End Fetch Versions ---
+
+  // --- Update Column Handlers --- M
   const handleAddColumn = () => {
-    const newColumnId = `col${Date.now()}`
+    const newColumnId = `col${Date.now()}`;
+    const firstAvailableBaseId = availablePrompts[0]?.base_prompt_id || null;
+    const firstAvailableVersionId = availablePrompts[0]?.id || null;
+
     setColumns([
       ...columns,
       {
         id: newColumnId,
-        promptId: availablePrompts[0].id,
-        modelId: "1",
+        basePromptId: firstAvailableBaseId,
+        selectedVersionId: firstAvailableVersionId,
+        modelId: "1", // Default model
         showPrompt: false,
+        availableVersions: [],
+        isLoadingVersions: !!firstAvailableBaseId, // Start loading if base prompt selected
       },
-    ])
+    ]);
+    // Fetch versions for the newly added column if a base prompt was selected
+    if (firstAvailableBaseId) {
+        fetchVersionsForColumn(newColumnId, firstAvailableBaseId);
+    }
+    // Add empty output for this column to all existing results (if needed)
+  };
 
-    // Add empty output for this column to all existing results
-    setResults(
-      results.map((result) => ({
-        ...result,
-        outputs: [
-          ...result.outputs,
-          {
-            columnId: newColumnId,
-            text: "No translation generated yet",
-            score: undefined,
-            comment: "",
-            analysis: "",
-          },
-        ],
-      })),
-    )
-  }
-
-  // Handle removing a column
   const handleRemoveColumn = (columnId: string) => {
-    setColumns(columns.filter((col) => col.id !== columnId))
+    setColumns(columns.filter((col) => col.id !== columnId));
+    // Remove outputs for this column from evaluationResults state if necessary
+  };
 
-    // Remove outputs for this column from all results
-    setResults(
-      results.map((result) => ({
-        ...result,
-        outputs: result.outputs.filter((output) => output.columnId !== columnId),
-      })),
-    )
-  }
+  const handleChangeBasePrompt = (columnId: string, basePromptId: string | null) => {
+      setColumns(prev => prev.map(col => {
+          if (col.id === columnId) {
+              // Reset version selection and fetch new versions
+              const newSelectedVersionId = null; // Always reset version when base changes
+              fetchVersionsForColumn(columnId, basePromptId);
+              return { ...col, basePromptId, selectedVersionId: newSelectedVersionId, isLoadingVersions: !!basePromptId, versionsError: null };
+          }
+          return col;
+      }));
+  };
 
-  // Handle changing prompt for a column
-  const handleChangePrompt = (columnId: string, promptId: string) => {
-    setColumns(columns.map((col) => (col.id === columnId ? { ...col, promptId } : col)))
-  }
+  const handleChangeVersion = (columnId: string, versionId: string | null) => {
+       setColumns(prev => prev.map(col => col.id === columnId ? { ...col, selectedVersionId: versionId } : col));
+  };
 
-  // Handle changing model for a column
   const handleChangeModel = (columnId: string, modelId: string) => {
-    setColumns(columns.map((col) => (col.id === columnId ? { ...col, modelId } : col)))
-  }
+      setColumns(prev => prev.map((col) => (col.id === columnId ? { ...col, modelId } : col)));
+  };
 
-  // Handle toggling prompt visibility
   const handleTogglePrompt = (columnId: string) => {
-    setColumns(columns.map((col) => (col.id === columnId ? { ...col, showPrompt: !col.showPrompt } : col)))
-  }
+      setColumns(prev => prev.map((col) => (col.id === columnId ? { ...col, showPrompt: !col.showPrompt } : col)));
+  };
+  // --- End Update Handlers ---
 
   // Handle score change
   const handleScoreChange = (resultId: string, columnId: string, score: number) => {
-    setResults(
-      results.map((result) => {
-        if (result.id === resultId) {
-          return {
-            ...result,
-            outputs: result.outputs.map((output) => {
-              if (output.columnId === columnId) {
-                return { ...output, score }
-              }
-              return output
-            }),
-          }
-        }
-        return result
-      }),
-    )
+    setEvaluationResults(prevResults => prevResults.map(res =>
+       res.id === resultId ? { ...res, score: score } : res
+    ));
+    console.log(`TODO: Update score for result ${resultId} to ${score}`);
   }
 
   // Handle comment change
   const handleCommentChange = (resultId: string, columnId: string, comment: string) => {
-    setResults(
-      results.map((result) => {
-        if (result.id === resultId) {
-          return {
-            ...result,
-            outputs: result.outputs.map((output) => {
-              if (output.columnId === columnId) {
-                return { ...output, comment }
-              }
-              return output
-            }),
-          }
-        }
-        return result
-      }),
-    )
+    setEvaluationResults(prevResults => prevResults.map(res =>
+       res.id === resultId ? { ...res, comment: comment } : res
+    ));
+    console.log(`TODO: Update comment for result ${resultId} to ${comment}`);
   }
 
   // Get prompt name and version by ID
-  const getPromptInfo = (promptId: string) => {
-    const prompt = availablePrompts.find((p) => p.id === promptId);
-    return prompt ? `${prompt.name} (v${prompt.version || '?.?'})` : "Select Prompt"; // Handle not found
-  }
+  const getPromptInfo = (versionId: string | null) => {
+      if (!versionId) return "Select Prompt Version";
+      // Need to find the specific version across all columns' availableVersions
+      for (const col of columns) {
+          const prompt = col.availableVersions?.find(p => p.id === versionId);
+          if (prompt) {
+              return `${prompt.name} (v${prompt.version || '?.?'})`;
+          }
+      }
+      // Fallback if version not found in currently loaded lists (e.g., initial state)
+      const latestPrompt = availablePrompts.find(p => p.id === versionId);
+      return latestPrompt ? `${latestPrompt.name} (v${latestPrompt.version || '?.?'})` : "Loading...";
+  };
 
   // Get prompt text by ID
-  const getPromptText = (promptId: string) => {
-    const prompt = availablePrompts.find((p) => p.id === promptId);
-    // Use sections if available and format, otherwise use text, fallback to empty
-    if (prompt?.sections && prompt.sections.length > 0) {
-        return prompt.sections.map(sec => `### ${sec.name}\n${sec.content}`).join('\n\n');
-    }
-    return prompt?.text || "No prompt text available"; // Handle missing text
-  }
+  const getPromptText = (versionId: string | null) => {
+       if (!versionId) return "No version selected";
+       for (const col of columns) {
+          const prompt = col.availableVersions?.find(p => p.id === versionId);
+          if (prompt?.sections && prompt.sections.length > 0) {
+             return prompt.sections.map(sec => `### ${sec.name}\n${sec.content}`).join('\n\n');
+          }
+          if (prompt?.text) return prompt.text;
+       }
+       const latestPrompt = availablePrompts.find(p => p.id === versionId);
+       // Fallback logic as in getPromptInfo
+       if (latestPrompt?.sections && latestPrompt.sections.length > 0) {
+           return latestPrompt.sections.map(sec => `### ${sec.name}\n${sec.content}`).join('\n\n');
+       }
+       return latestPrompt?.text || "Prompt text not available";
+  };
 
   // Get model name by ID
   const getModelName = (modelId: string) => {
@@ -305,33 +316,295 @@ export function EvaluationPanel({ currentLanguage }: EvaluationPanelProps) {
     return model ? model.name : "Unknown Model"
   }
 
+  // Function to clear any active polling
+  const clearPolling = () => {
+    if (pollingIntervalId) {
+      clearInterval(pollingIntervalId);
+      setPollingIntervalId(null);
+      console.log("Polling stopped.");
+    }
+  };
+
+  // --- Function to Fetch Results (Modified for Polling) --- M
+  const fetchEvaluationResults = async (evalId: string) => {
+    if (!evalId) return;
+
+    console.log(`Polling results for evaluation ID: ${evalId}`);
+    let latestStatus = evaluationStatus;
+    try {
+        // 1. Check completion status first (this also returns the eval object)
+        const statusResponse = await fetch(`http://localhost:8000/api/v1/evaluations/${evalId}/check_completion`, { method: 'PATCH' });
+        if (statusResponse.ok) {
+            const evalData = await statusResponse.json();
+            latestStatus = evalData.status;
+            setEvaluationStatus(latestStatus);
+        } else {
+             console.warn(`Failed to check/update completion status: ${statusResponse.statusText}`);
+             // Continue to fetch results anyway
+        }
+
+        // 2. Fetch the results
+        const resultsResponse = await fetch(`http://localhost:8000/api/v1/evaluations/${evalId}/results`);
+        if (!resultsResponse.ok) {
+             throw new Error(`Fetch results failed: ${resultsResponse.statusText}`);
+        }
+        const resultsData: EvaluationResult[] = await resultsResponse.json();
+        setEvaluationResults(resultsData);
+        console.log("Fetched results:", resultsData);
+
+        // 3. Update pending state based on fetched results
+        setPendingOutputs(prevPending => {
+            const newPending = new Set(prevPending);
+            // Find mapping from result to rowId (using sourceText for now)
+            resultsData.forEach(result => {
+                const matchingRow = testRows.find(row => row.sourceText === result.source_text);
+                // --- FIX: Find column based on result.prompt_id --- M
+                // Find the column that has this specific version selected
+                const matchingCol = columns.find(col => col.selectedVersionId === result.prompt_id);
+                // --- End FIX ---
+                if (matchingRow && matchingCol) {
+                    // If found, remove from pending
+                    newPending.delete(`${matchingRow.id}-${matchingCol.id}`);
+                }
+            });
+            // If status is completed/failed, clear all pending for this eval
+            if (latestStatus === 'completed' || latestStatus === 'failed') {
+                 console.log(`Evaluation ${latestStatus}, clearing all pending.`);
+                 return new Set(); // Clear all
+            }
+            return newPending;
+        });
+
+        // 4. Stop polling if completed or failed
+        if (latestStatus === 'completed' || latestStatus === 'failed') {
+            clearPolling();
+            setIsLoading(false); // Ensure main loading state is off
+            toast.info(`Evaluation ${evalId} finished with status: ${latestStatus}`);
+        }
+
+    } catch (error) {
+        console.error("Failed during results fetch/polling:", error);
+        toast.error(`Failed to fetch results: ${error instanceof Error ? error.message : "Unknown error"}`);
+        // Don't set status to failed here, rely on check_completion endpoint?
+        // Maybe stop polling on error?
+        clearPolling();
+        setIsLoading(false);
+    } finally {
+        // setIsLoadingResults(false);
+    }
+  };
+  // --- End Fetch Results ---
+
+  // --- Polling Effect --- M
+  useEffect(() => {
+      // Start polling when an evaluation ID is set and status is pending/running
+      if (currentEvaluationId && (evaluationStatus === 'pending' || evaluationStatus === 'running')) {
+          console.log(`Starting polling for ${currentEvaluationId}`);
+          // Clear any existing interval first
+          clearPolling();
+          // Initial fetch
+          fetchEvaluationResults(currentEvaluationId);
+          // Set interval
+          const intervalId = setInterval(() => {
+              fetchEvaluationResults(currentEvaluationId);
+          }, 5000); // Poll every 5 seconds
+          setPollingIntervalId(intervalId);
+      } else {
+          // Stop polling if no active evaluation ID or status is final
+          clearPolling();
+      }
+
+      // Cleanup function to stop polling when component unmounts or deps change
+      return () => {
+          clearPolling();
+      };
+  // Depend on currentEvaluationId and evaluationStatus to start/stop polling
+  }, [currentEvaluationId, evaluationStatus]);
+  // --- End Polling Effect ---
+
   // Handle running evaluation
-  const handleRunEvaluation = () => {
-    setIsLoading(true)
-    // Simulate API call
-    setTimeout(() => {
-      setIsLoading(false)
-      // In a real implementation, this would fetch actual results
-    }, 1500)
-  }
+  const handleRunEvaluation = async () => {
+    setIsLoading(true);
+    // --- Clear previous results and pending state --- M
+    setEvaluationResults([]);
+    setPendingOutputs(new Set());
+    // --- End Clear ---
+    setCurrentEvaluationId(null);
+    setEvaluationStatus("pending");
+    console.log("Running evaluation...");
+
+    const promptIds = columns.map(col => col.selectedVersionId).filter(id => !!id);
+    if (promptIds.length === 0) {
+      toast.error("Please select at least one prompt in the columns.");
+      setIsLoading(false);
+      return;
+    }
+
+    let testSetData: EvaluationRequestData[] = testRows.map(row => ({
+        source_text: row.sourceText,
+        reference_text: row.referenceText.trim() === "" ? null : row.referenceText
+    }));
+    testSetData = testSetData.filter(item => item.source_text.trim() !== "");
+
+    if (testSetData.length === 0) {
+        toast.error("Please provide test set data (Manual Input).");
+        setIsLoading(false);
+        return;
+    }
+
+    const requestBody = {
+        prompt_ids: promptIds,
+        test_set_data: testSetData,
+        test_set_name: "Manual Input"
+    };
+
+    console.log("Evaluation Request Body:", requestBody);
+
+    try {
+        const response = await fetch(`http://localhost:8000/api/v1/evaluations/`, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+            },
+            body: JSON.stringify(requestBody),
+        });
+
+        if (!response.ok) {
+            let errorDetail = `HTTP error! Status: ${response.status}`;
+            try {
+                const errorData = await response.json();
+                errorDetail = errorData.detail || errorDetail;
+            } catch (e) { /* Ignore */ }
+            throw new Error(errorDetail);
+        }
+
+        const evaluationData = await response.json();
+        console.log("Evaluation started:", evaluationData);
+        setCurrentEvaluationId(evaluationData.id);
+        setEvaluationStatus(evaluationData.status);
+        toast.success(`Evaluation ${evaluationData.id} started successfully!`);
+
+        // --- Set Pending Outputs --- M
+        const newPending = new Set<string>();
+        testRows.forEach(row => {
+            // Only include rows that were actually sent
+            if (row.sourceText.trim() !== "") {
+                columns.forEach(col => {
+                    newPending.add(`${row.id}-${col.id}`);
+                });
+            }
+        });
+        setPendingOutputs(newPending);
+        console.log("Pending outputs set:", newPending);
+        // --- End Set Pending ---
+
+        // TODO: Implement polling
+
+    } catch (error) {
+        console.error("Failed to start evaluation:", error);
+        toast.error(`Failed to start evaluation: ${error instanceof Error ? error.message : "Unknown error"}`);
+        setEvaluationStatus("failed");
+    } finally {
+        setIsLoading(false);
+    }
+  };
 
   // Handle adding a test row
   const handleAddTestRow = () => {
-    const newRowId = `row${Date.now()}`
-    const newRow: ResultItem = {
-      id: newRowId,
-      sourceText: "Enter source text here...",
-      referenceTranslation: "Enter reference translation here...",
-      outputs: columns.map((column) => ({
-        columnId: column.id,
-        text: "No translation generated yet",
-        score: undefined,
-        comment: "",
-        analysis: "",
-      })),
+    setTestRows([...testRows, { id: Date.now().toString(), sourceText: "", referenceText: "" }]);
+  };
+
+  const handleDeleteTestRow = (id: string) => {
+      // Prevent deleting the last row? Optional.
+      if (testRows.length <= 1) {
+          toast.info("Cannot delete the last test row.");
+          return;
+      }
+      setTestRows(testRows.filter(row => row.id !== id));
+      // TODO: Also clear any evaluation results associated with this row if needed
+  };
+
+  const handleTestRowChange = (id: string, field: keyof Omit<TestRow, 'id'>, value: string) => {
+    setTestRows(prevRows =>
+      prevRows.map(row =>
+        row.id === id ? { ...row, [field]: value } : row
+      )
+    );
+  };
+
+  // --- Handler to Save Evaluation Session --- M
+  const handleSaveEvaluation = async () => {
+    if (!currentEvaluationId) {
+      toast.error("Please run an evaluation before saving.");
+      return;
     }
-    setResults([...results, newRow])
-  }
+    if (evaluationResults.length === 0) {
+        toast.error("No results available to save for the current evaluation.");
+        return;
+    }
+
+    // 1. Gather configuration and results
+    // Note: Mapping results needs care if rows/columns change after running eval
+    const sessionData = {
+      evaluationRunId: currentEvaluationId,
+      config: {
+          columns: columns.map(c => ({ // Save config of each column
+              basePromptId: c.basePromptId,
+              selectedVersionId: c.selectedVersionId,
+              modelId: c.modelId
+          })),
+          testSet: testRows.map(r => ({ // Save the test set used
+              sourceText: r.sourceText,
+              referenceText: r.referenceText
+          })),
+          // Add other config like project, language if needed
+          project: selectedProject,
+          language: currentLanguage
+      },
+      // Map results including scores/comments
+      // We assume evaluationResults state accurately reflects the latest feedback
+      results: evaluationResults.map(res => ({
+          promptId: res.prompt_id,
+          sourceText: res.source_text,
+          referenceText: res.reference_text,
+          modelOutput: res.model_output,
+          score: res.score,
+          comment: res.comment
+      }))
+    };
+
+    console.log("Attempting to save evaluation session:", sessionData);
+    // TODO: Replace with actual saving state indicator
+    toast.info("Saving evaluation session...");
+
+    // 2. Call Backend (Endpoint TBD)
+    try {
+      // Placeholder for the actual API endpoint
+      const response = await fetch(`/api/v1/evaluation-sessions/`, { // << ENDPOINT DOES NOT EXIST YET
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(sessionData),
+      });
+
+      if (!response.ok) {
+        let errorDetail = `HTTP error! Status: ${response.status}`;
+        try {
+          const errorData = await response.json();
+          errorDetail = errorData.detail || errorDetail;
+        } catch (e) { /* Ignore */ }
+        throw new Error(errorDetail);
+      }
+
+      const savedSession = await response.json();
+      console.log("Evaluation session saved:", savedSession);
+      toast.success(`Evaluation session saved successfully (ID: ${savedSession.id})`);
+
+    } catch (error) {
+      console.error("Failed to save evaluation session:", error);
+      toast.error(`Save failed: ${error instanceof Error ? error.message : "Unknown error"}`);
+    }
+  };
+  // --- End Save Handler ---
 
   return (
     <div className="space-y-6">
@@ -425,26 +698,16 @@ export function EvaluationPanel({ currentLanguage }: EvaluationPanelProps) {
                   </div>
                 )}
 
-                {testSetType === "manual" && (
-                  <div className="grid w-full gap-1.5">
-                    <Label htmlFor="manual-input">Enter Text Samples</Label>
-                    <Textarea
-                      id="manual-input"
-                      placeholder="Enter one text sample per line"
-                      value={manualInput}
-                      onChange={(e) => setManualInput(e.target.value)}
-                      className="min-h-[150px]"
-                    />
-                  </div>
-                )}
+                <p className="text-sm text-muted-foreground">Add/edit test rows directly in the table below.</p>
               </div>
             </PopoverContent>
           </Popover>
 
-          <Button onClick={handleRunEvaluation} disabled={isLoading}>
+          <Button onClick={handleRunEvaluation} disabled={isLoading || !!pollingIntervalId}>
             <Play className="mr-2 h-4 w-4" />
-            {isLoading ? "Running..." : "Run Evaluation"}
+            {isLoading ? "Starting..." : "Run Evaluation"}
           </Button>
+          {evaluationStatus && <span className="text-sm text-muted-foreground">Status: {evaluationStatus}</span>}
         </div>
       </div>
 
@@ -457,65 +720,91 @@ export function EvaluationPanel({ currentLanguage }: EvaluationPanelProps) {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead className="w-[200px]">Source Text</TableHead>
-                {showIdealOutputs && <TableHead className="w-[200px]">Reference Translation</TableHead>}
+                <TableHead className="w-[40%]">Source Text</TableHead>
+                {showIdealOutputs && <TableHead className="w-[40%]">Reference Translation</TableHead>}
 
                 {columns.map((column) => (
                   <TableHead key={column.id} className="min-w-[250px]">
                     <div className="space-y-2">
+                      {/* Base Prompt Select */}
                       <div className="flex items-center justify-between">
                         <Select
-                          value={column.promptId}
-                          onValueChange={(value) => handleChangePrompt(column.id, value)}
+                          value={column.basePromptId ?? SELECT_PLACEHOLDER_VALUE} // Use constant for null
+                          onValueChange={(value) => handleChangeBasePrompt(column.id, value === SELECT_PLACEHOLDER_VALUE ? null : value)}
                           disabled={isLoadingPrompts}
                         >
-                          <SelectTrigger className="h-8 w-[180px]">
-                            <SelectValue placeholder="Select prompt">
-                              {getPromptInfo(column.promptId)}
-                            </SelectValue>
+                          <SelectTrigger className="h-8 w-full mb-1"> {/* Full width */} 
+                            <SelectValue placeholder="Select Base Prompt" />
                           </SelectTrigger>
                           <SelectContent>
                             {isLoadingPrompts && <SelectItem value="loading" disabled>Loading...</SelectItem>}
                             {promptsError && <SelectItem value="error" disabled>Error loading</SelectItem>}
+                            <SelectItem value={SELECT_PLACEHOLDER_VALUE}>-- Select Base Prompt --</SelectItem>
                             {!isLoadingPrompts && !promptsError && availablePrompts.map((prompt) => (
-                              <SelectItem key={prompt.id} value={prompt.id}>
+                              <SelectItem key={prompt.base_prompt_id} value={prompt.base_prompt_id}>
                                 {prompt.name}
                               </SelectItem>
                             ))}
                           </SelectContent>
                         </Select>
+                      </div>
 
-                        <div className="flex items-center">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => handleTogglePrompt(column.id)}
-                            className="h-8 w-8"
-                          >
-                            {column.showPrompt ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => handleRemoveColumn(column.id)}
-                            className="h-8 w-8 text-destructive"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
+                      {/* Version Select */}
+                      <div className="flex items-center justify-between">
+                        <Select
+                            value={column.selectedVersionId ?? SELECT_PLACEHOLDER_VALUE} // Use constant for null
+                            onValueChange={(value) => handleChangeVersion(column.id, value === SELECT_PLACEHOLDER_VALUE ? null : value)}
+                            disabled={!column.basePromptId || column.isLoadingVersions}
+                        >
+                            <SelectTrigger className="h-8 w-[calc(100%-70px)]"> {/* Adjusted width */} 
+                                <SelectValue placeholder="Select Version" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {column.isLoadingVersions && <SelectItem value="loading" disabled>Loading...</SelectItem>}
+                                {column.versionsError && <SelectItem value="error" disabled>{column.versionsError}</SelectItem>}
+                                <SelectItem value={SELECT_PLACEHOLDER_VALUE}>-- Select Version --</SelectItem>
+                                {column.availableVersions?.map((version) => (
+                                    <SelectItem key={version.id} value={version.id}>
+                                        Version {version.version}
+                                        {version.is_latest ? " (Latest)" : ""}
+                                        {version.isProduction ? " (Prod)" : ""}
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                        {/* Action Buttons */} 
+                        <div className="flex items-center ml-1">
+                             <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => handleTogglePrompt(column.id)}
+                                className="h-8 w-8"
+                              >
+                                {column.showPrompt ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => handleRemoveColumn(column.id)}
+                                className="h-8 w-8 text-destructive"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
                         </div>
                       </div>
 
-                      <div className="flex items-center justify-between">
+                      {/* Model Select (Placeholder) */}
+                      <div className="mt-1">
                         <Select value={column.modelId} onValueChange={(value) => handleChangeModel(column.id, value)}>
-                          <SelectTrigger className="h-8 w-[180px]">
-                            <SelectValue placeholder="Select model" />
+                          <SelectTrigger className="h-8 w-full">
+                             <SelectValue placeholder="Select model" />
                           </SelectTrigger>
                           <SelectContent>
-                            {mockModels.map((model) => (
-                              <SelectItem key={model.id} value={model.id}>
-                                {model.name}
-                              </SelectItem>
-                            ))}
+                             {mockModels.map((model) => (
+                               <SelectItem key={model.id} value={model.id}>
+                                 {model.name}
+                               </SelectItem>
+                             ))}
                           </SelectContent>
                         </Select>
                       </div>
@@ -523,76 +812,132 @@ export function EvaluationPanel({ currentLanguage }: EvaluationPanelProps) {
                       {/* Prompt Preview */}
                       {column.showPrompt && (
                         <ScrollArea className="h-[100px] w-full rounded-md border bg-muted/50 mt-2 p-2">
-                          <p className="text-xs font-mono whitespace-pre-wrap">
-                            {getPromptText(column.promptId)}
-                          </p>
+                           <p className="text-xs font-mono whitespace-pre-wrap">
+                               {getPromptText(column.selectedVersionId)}
+                           </p>
                         </ScrollArea>
                       )}
                     </div>
                   </TableHead>
                 ))}
 
-                <TableHead className="w-[50px]">
+                <TableHead className="w-[100px]">
                   <Button variant="ghost" size="sm" onClick={handleAddColumn} className="h-8">
-                    <Plus className="h-4 w-4" />
-                    Add Column
+                    <Plus className="h-4 w-4 mr-1" /> Col
                   </Button>
                 </TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {results.map((result) => (
-                <TableRow key={result.id}>
-                  <TableCell className="align-top font-medium">{result.sourceText}</TableCell>
-                  {showIdealOutputs && <TableCell className="align-top">{result.referenceTranslation}</TableCell>}
+              {testRows.map((row, index) => (
+                <TableRow key={row.id}>
+                  <TableCell className="align-top p-1">
+                    <Textarea
+                      placeholder={`Source ${index + 1}`}
+                      value={row.sourceText}
+                      onChange={(e) => handleTestRowChange(row.id, 'sourceText', e.target.value)}
+                      className="min-h-[80px] h-auto resize-y border-none focus-visible:ring-1 focus-visible:ring-ring p-1"
+                    />
+                  </TableCell>
+                  {showIdealOutputs && (
+                    <TableCell className="align-top p-1">
+                       <Textarea
+                         placeholder={`Reference ${index + 1}`}
+                         value={row.referenceText}
+                         onChange={(e) => handleTestRowChange(row.id, 'referenceText', e.target.value)}
+                         className="min-h-[80px] h-auto resize-y border-none focus-visible:ring-1 focus-visible:ring-ring p-1"
+                       />
+                    </TableCell>
+                  )}
 
                   {columns.map((column) => {
-                    const output = result.outputs.find((o) => o.columnId === column.id)
-                    return output ? (
-                      <TableCell key={column.id} className="align-top">
-                        <div className="space-y-2">
-                          <p>{output.text}</p>
-                          <div className="space-y-2">
-                            <div className="flex">
-                              {[1, 2, 3, 4, 5].map((star) => (
-                                <button
-                                  key={star}
-                                  type="button"
-                                  className={`w-6 h-6 ${
-                                    (output.score || 0) >= star ? "text-yellow-500" : "text-gray-300 dark:text-gray-600"
-                                  }`}
-                                  onClick={() => handleScoreChange(result.id, column.id, star)}
-                                >
-                                  ★
-                                </button>
-                              ))}
-                            </div>
+                    const cellId = `${row.id}-${column.id}`;
+                    const isPending = pendingOutputs.has(cellId);
 
-                            <Tabs defaultValue="comment" className="w-full">
-                              <TabsList className="grid w-full grid-cols-2">
-                                <TabsTrigger value="comment">Comment</TabsTrigger>
-                                <TabsTrigger value="analysis">Analysis</TabsTrigger>
-                              </TabsList>
-                              <div className="mt-2 p-2 border rounded-md min-h-[100px] max-h-[150px] overflow-y-auto">
-                                {output.comment && <div className="text-sm">{output.comment}</div>}
-                                {output.analysis && (
-                                  <div className="text-sm whitespace-pre-line font-mono text-xs">{output.analysis}</div>
-                                )}
-                              </div>
-                            </Tabs>
+                    return (
+                      <TableCell key={cellId} className="align-top p-2">
+                        {isPending ? (
+                          <div className="flex items-center justify-center text-muted-foreground">
+                            <Loader2 className="h-4 w-4 animate-spin mr-1" /> Thinking...
                           </div>
-                        </div>
+                        ) : (
+                          (() => { // Use IIFE to handle logic cleanly
+                            // Find result matching source text and the specific version selected for this column
+                            const output = evaluationResults.find(r =>
+                                r.source_text === row.sourceText && r.prompt_id === column.selectedVersionId // Correct comparison
+                            );
+                            const resultId = output?.id;
+
+                            if (output) {
+                              // Display result if found
+                              return (
+                                 <div className="space-y-2">
+                                    <p>{output.model_output || "(No output)"}</p>
+                                    <div className="space-y-2">
+                                      {/* Score Input */}
+                                      <div className="flex">
+                                        {[1, 2, 3, 4, 5].map((star) => (
+                                          <button
+                                            key={star}
+                                            type="button"
+                                            className={`w-6 h-6 ${ (output.score || 0) >= star ? "text-yellow-500" : "text-gray-300 dark:text-gray-600" }`}
+                                            onClick={() => resultId && handleScoreChange(resultId, column.id, star)}
+                                            // Disable if overall eval is running?
+                                            disabled={!!pollingIntervalId || isLoading}
+                                          >
+                                            ★
+                                          </button>
+                                        ))}
+                                      </div>
+                                      {/* Comment Input */}
+                                      <Tabs defaultValue="comment" className="w-full">
+                                         {/* ... TabsList ... */}
+                                        <div className="mt-2 p-2 border rounded-md min-h-[100px] max-h-[150px] overflow-y-auto">
+                                          <Textarea
+                                            placeholder="Add comment..."
+                                            value={output.comment || ""}
+                                            onChange={(e) => resultId && handleCommentChange(resultId, column.id, e.target.value)}
+                                            className="text-sm border-none focus-visible:ring-0 focus-visible:ring-offset-0 p-0 h-full resize-none"
+                                            rows={4}
+                                            disabled={!!pollingIntervalId || isLoading}
+                                          />
+                                        </div>
+                                      </Tabs>
+                                    </div>
+                                 </div>
+                              );
+                            } else {
+                              // Display placeholder if not pending and no result yet
+                              return <div className="text-muted-foreground">-</div>;
+                            }
+                          })()
+                        )}
                       </TableCell>
-                    ) : (
-                      <TableCell key={column.id} className="align-top">
-                        <div className="text-muted-foreground">No data available</div>
-                      </TableCell>
-                    )
+                    );
                   })}
 
-                  <TableCell></TableCell>
+                  {/* Row Actions Cell */}
+                  <TableCell className="align-middle p-1 text-center">
+                    <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => handleDeleteTestRow(row.id)}
+                        disabled={testRows.length <= 1} // Disable delete for last row
+                        className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                        title="Delete row"
+                        >
+                        <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </TableCell>
                 </TableRow>
               ))}
+              {evaluationResults.length === 0 && !isLoadingResults && (
+                    <TableRow>
+                        <TableCell colSpan={columns.length + (showIdealOutputs ? 2 : 1) + 1} className="text-center">
+                            No results found for this evaluation.
+                        </TableCell>
+                    </TableRow>
+                )}
             </TableBody>
           </Table>
         </CardContent>
@@ -607,7 +952,9 @@ export function EvaluationPanel({ currentLanguage }: EvaluationPanelProps) {
           <Download className="mr-2 h-4 w-4" />
           Export Results
         </Button>
-        <Button>Save Evaluation</Button>
+        <Button onClick={handleSaveEvaluation} disabled={!currentEvaluationId || isLoading || !!pollingIntervalId}>
+            Save Evaluation
+        </Button>
       </div>
     </div>
   )

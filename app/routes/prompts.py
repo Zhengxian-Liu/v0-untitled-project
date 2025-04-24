@@ -311,3 +311,41 @@ async def delete_prompt(
 
     # No content to return on successful deletion
     return 
+
+# --- NEW: Endpoint to get all versions for a base prompt --- M
+@router.get(
+    "/base/{base_prompt_id}/versions",
+    response_model=List[Prompt],
+    summary="Get all versions for a specific base prompt",
+    description="Retrieves all saved versions of a prompt, linked by their common base_prompt_id.",
+    responses={404: {"description": "No versions found for this base prompt ID"}}
+)
+async def get_prompt_versions(
+    base_prompt_id: PyObjectId,
+    db: AsyncIOMotorDatabase = Depends(get_database),
+):
+    """Retrieve all versions for a given base prompt ID, sorted newest first by creation date."""
+    # Find all documents matching the base_prompt_id
+    versions_cursor = db[PROMPT_COLLECTION].find(
+        {"base_prompt_id": base_prompt_id}
+    ).sort("created_at", -1) # Sort newest first
+
+    versions_raw = await versions_cursor.to_list(length=None) # Get all versions
+
+    if not versions_raw:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"No prompt versions found for base ID '{base_prompt_id}'",
+        )
+
+    # Validate each version document
+    validated_versions = []
+    for doc in versions_raw:
+        try:
+            validated_versions.append(Prompt.model_validate(doc))
+        except Exception as e:
+            logger.error(f"Failed to validate prompt version document with _id {doc.get('_id')} for base {base_prompt_id}: {e}")
+            # Skip invalid docs for this response
+
+    return validated_versions
+# --- End NEW Endpoint --- 

@@ -1,22 +1,20 @@
 export type Prompt = {
-  id: string // Matches backend ObjectId serialized as string
+  id: string // This is now the VERSION ID
   name: string
   description: string
-  sections: PromptSection[] // Expect structured sections from backend
-  text?: string // Text is now optional
-  created_at: string // Backend sends ISO format datetime string
-  updated_at: string // Backend sends ISO format datetime string
-
-  // Re-added fields (now sent by backend)
-  tags: string[] // Should now be present, defaulting to [] if not sent
-  project?: string // Optional
-  language?: string // Optional
-  isProduction?: boolean // Optional, defaults to false on backend
-  version?: string // Optional, defaults to "1.0" on backend
-
-  // Fields NOT currently sent by basic backend Prompt model:
-  // lastModified: string
-  // sections?: PromptSection[]
+  sections: PromptSection[]
+  text?: string
+  created_at: string
+  updated_at: string
+  tags: string[]
+  project?: string
+  language?: string
+  isProduction?: boolean
+  version?: string
+  // --- Add Versioning Fields --- M
+  base_prompt_id: string // ID linking all versions of a prompt
+  is_latest: boolean // Is this the latest version?
+  // --- End Versioning Fields ---
 }
 
 export type PromptSection = {
@@ -67,21 +65,3 @@ export type ProductionPrompt = {
   promptId: string
   promptName: string
 }
-
-// --- NEW: Prompt History Type (Frontend) --- M
-// Mimics the backend PromptHistory model structure returned by the API
-export type PromptHistory = {
-  id: string // The ID of the history record itself
-  prompt_id: string // ID of the main prompt it belongs to
-  saved_at: string // Timestamp when this history record was saved (ISO string)
-  // --- Fields copied from Prompt state ---
-  name: string
-  description?: string
-  sections: PromptSection[]
-  tags: string[]
-  project?: string
-  language?: string
-  isProduction: boolean
-  version: string
-}
-// --- End NEW Type ---

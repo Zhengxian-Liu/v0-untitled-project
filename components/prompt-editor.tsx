@@ -31,9 +31,8 @@ import {
   BookmarkPlus,
   Bookmark,
   AlertTriangle,
-  History,
 } from "lucide-react"
-import type { Prompt, PromptSection, SavedSection, PromptHistory, ProductionPrompt } from "@/types"
+import type { Prompt, PromptSection, SavedSection, ProductionPrompt } from "@/types"
 import { toast } from "sonner"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -207,12 +206,6 @@ export function PromptEditor({ prompt, onSaveSuccess, currentLanguage }: PromptE
   const [isLoadingProductionCheck, setIsLoadingProductionCheck] = useState(false)
   const [showProductionConfirmDialog, setShowProductionConfirmDialog] = useState(false)
   // --- End Restore ---
-
-  // --- State for History --- M
-  const [showHistoryDialog, setShowHistoryDialog] = useState(false);
-  const [promptHistory, setPromptHistory] = useState<PromptHistory[]>([]);
-  const [isLoadingHistory, setIsLoadingHistory] = useState(false);
-  // --- End History State ---
 
   useEffect(() => {
     if (prompt) {
@@ -428,16 +421,15 @@ export function PromptEditor({ prompt, onSaveSuccess, currentLanguage }: PromptE
   const handleSave = async () => {
     console.log("Save button clicked!");
 
-    // --- MODIFIED: Differentiate between Create (POST) and Update (PUT) ---
-    const isUpdating = !!prompt;
-    const promptId = prompt?.id; // Get ID if updating
-    const method = isUpdating ? "PUT" : "POST";
-    const url = isUpdating
-      ? `http://localhost:8000/api/v1/prompts/${promptId}`
-      : "http://localhost:8000/api/v1/prompts/";
-    // --- End MODIFICATION ---
+    // --- MODIFIED: Handle both Create (POST) and Save New Version (PUT) --- M
+    const isCreatingNew = !prompt; // True if prompt prop is null
+    const method = isCreatingNew ? "POST" : "PUT";
+    const url = isCreatingNew
+      ? "http://localhost:8000/api/v1/prompts/"
+      : `http://localhost:8000/api/v1/prompts/${prompt.id}`; // Use prompt.id for PUT base
 
-    const promptData = {
+    // Payload preparation - needs slight adjustment based on method
+    const basePayload = {
       name: name,
       description: description,
       sections: sections,
@@ -445,14 +437,21 @@ export function PromptEditor({ prompt, onSaveSuccess, currentLanguage }: PromptE
       project: selectedProject || null,
       language: currentLanguage,
       isProduction: isProduction,
-      version: version,
+      // version: version, // Don't send version - backend handles it
     };
+
+    // For PUT, the payload matches PromptUpdate (all optional)
+    // For POST, the payload matches PromptCreate (all required from PromptBase)
+    // Our basePayload includes everything needed for PromptCreate implicitly.
+    const promptData = basePayload;
+
+    // --- End MODIFICATION ---
 
     console.log(`Attempting to ${method} prompt data to ${url}:`, promptData);
 
     try {
       const response = await fetch(url, {
-        method: method, // Use dynamic method
+        method: method,
         headers: {
           "Content-Type": "application/json",
         },
@@ -467,101 +466,29 @@ export function PromptEditor({ prompt, onSaveSuccess, currentLanguage }: PromptE
         } catch (e) { /* Ignore JSON parsing error */ }
         console.error("Failed to save prompt:", errorDetail);
         toast.error(`Error saving prompt: ${errorDetail}`);
-        return;
-      }
-
-      const savedPrompt: Prompt = await response.json();
-      console.log("Prompt saved successfully:", savedPrompt);
-      toast.success("Prompt saved successfully!");
-
-      // --- MODIFIED: Update local state after save/update --- M
-      // Update the version state locally to reflect backend change
-      if (savedPrompt.version) {
-        setVersion(savedPrompt.version);
-      }
-      // If we are updating (not creating), potentially update other states too?
-      // For now, just version as it's auto-incremented.
-      // --- End MODIFICATION ---
-
-      // Call the success callback if provided (triggers library refresh)
-      if (onSaveSuccess) {
-        onSaveSuccess();
-      }
-
-    } catch (error) {
-      console.error("Error saving prompt:", error);
-      toast.error(`An unexpected error occurred: ${error}`);
-    }
-  };
-  // --- End NEW handler ---
-
-  // --- History Handlers --- M
-  const fetchHistory = async () => {
-    if (!prompt?.id) return; // Need a prompt ID
-
-    setIsLoadingHistory(true);
-    try {
-      const response = await fetch(`http://localhost:8000/api/v1/prompts/${prompt.id}/history`);
-      if (!response.ok) {
-        throw new Error(`Failed to fetch history: ${response.statusText}`);
-      }
-      const data = await response.json();
-      // TODO: Validate data against PromptHistory type from backend
-      setPromptHistory(data as PromptHistory[]);
-      setShowHistoryDialog(true); // Open dialog only after successful fetch
-    } catch (error) {
-      console.error("Error fetching prompt history:", error);
-      toast.error(`Failed to load history: ${error instanceof Error ? error.message : error}`);
-      setShowHistoryDialog(false); // Ensure dialog is closed on error
-    } finally {
-      setIsLoadingHistory(false);
-    }
-  };
-
-  const handleRestore = async (historyId: string) => {
-    if (!prompt?.id) return;
-
-    console.log(`Restoring prompt ${prompt.id} from history ${historyId}`);
-    try {
-      const response = await fetch(`http://localhost:8000/api/v1/prompts/${prompt.id}/restore/${historyId}`, {
-        method: "POST",
-      });
-
-      if (!response.ok) {
-        let errorDetail = `HTTP error! status: ${response.status}`;
-        try {
-            const errorData = await response.json();
-            errorDetail = errorData.detail || errorDetail;
-        } catch (e) { /* Ignore JSON parsing error */ }
         throw new Error(errorDetail);
       }
 
-      const restoredPrompt: Prompt = await response.json();
-      console.log("Prompt restored successfully:", restoredPrompt);
-      toast.success("Prompt restored successfully!");
+      const savedPromptVersion: Prompt = await response.json();
+      const successMessage = isCreatingNew
+        ? `Prompt created successfully as version ${savedPromptVersion.version}!`
+        : `Prompt saved successfully as new version ${savedPromptVersion.version}!`;
+      toast.success(successMessage);
 
-      // --- Update Editor State Directly --- M
-      setName(restoredPrompt.name || "");
-      setDescription(restoredPrompt.description || "");
-      setSections(restoredPrompt.sections || []);
-      setSelectedTags(restoredPrompt.tags || []);
-      setSelectedProject(restoredPrompt.project);
-      setIsProduction(restoredPrompt.isProduction || false);
-      setVersion(restoredPrompt.version || "1.0");
-      // --- End State Update ---
+      // Update local state
+      setVersion(savedPromptVersion.version || "?.?");
+      // If creating, maybe update the 'prompt' prop reference somehow?
+      // For now, rely on library refresh via onSaveSuccess
 
-      // Close history dialog and trigger library refresh (still useful for library view)
-      setShowHistoryDialog(false);
       if (onSaveSuccess) {
         onSaveSuccess();
       }
 
     } catch (error) {
-        console.error("Error restoring prompt:", error);
-        toast.error(`Failed to restore prompt: ${error instanceof Error ? error.message : error}`);
+      console.error(`Error ${isCreatingNew ? 'creating' : 'saving'} prompt:`, error);
+      toast.error(`Failed to ${isCreatingNew ? 'create' : 'save'} prompt: ${error instanceof Error ? error.message : error}`);
     }
   };
-  // --- End History Handlers ---
 
   return (
     <div className="space-y-6">
@@ -577,15 +504,6 @@ export function PromptEditor({ prompt, onSaveSuccess, currentLanguage }: PromptE
             <span className="text-sm text-muted-foreground mr-1">Version:</span>
             <span className="text-sm font-medium">{version}</span>
           </div>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={fetchHistory}
-            disabled={!prompt || isLoadingHistory}
-          >
-            <History className="mr-2 h-4 w-4" />
-            {isLoadingHistory ? "Loading..." : "View History"}
-          </Button>
         </div>
       </div>
 
@@ -913,63 +831,6 @@ export function PromptEditor({ prompt, onSaveSuccess, currentLanguage }: PromptE
         </DialogContent>
       </Dialog>
       {/* --- End Restore --- */}
-
-      {/* --- History Dialog --- M */}
-      <Dialog open={showHistoryDialog} onOpenChange={setShowHistoryDialog}>
-        <DialogContent className="sm:max-w-[60%]"> {/* Make dialog wider */} 
-          <DialogHeader>
-            <DialogTitle>Prompt History for: {prompt?.name}</DialogTitle>
-            <DialogDescription>
-              Select a previous version to view its details or restore it.
-            </DialogDescription>
-          </DialogHeader>
-          <ScrollArea className="h-[50vh] w-full rounded-md border p-4">
-            {promptHistory.length > 0 ? (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Saved At</TableHead>
-                    <TableHead>Version</TableHead>
-                    <TableHead>Description</TableHead>
-                    <TableHead>Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {promptHistory.map((historyItem) => {
-                    // --- Add Log --- M
-                    console.log("History Dialog: Rendering row for history item:", historyItem);
-                    // --- End Log ---
-                    return (
-                      <TableRow key={historyItem.id ?? Math.random()}> {/* Use random key if id is missing to avoid warning, but ID *should* exist */}
-                        <TableCell>{new Date(historyItem.saved_at).toLocaleString()}</TableCell>
-                        <TableCell>v{historyItem.version}</TableCell>
-                        <TableCell className="truncate max-w-xs">{historyItem.description || "-"}</TableCell>
-                        <TableCell>
-                          <Button
-                             variant="outline"
-                             size="sm"
-                             onClick={() => handleRestore(historyItem.id)} // Pass the ID here
-                           >
-                             Restore
-                           </Button>
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
-            ) : (
-              <p className="text-center text-muted-foreground">No history found for this prompt.</p>
-            )}
-          </ScrollArea>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowHistoryDialog(false)}>
-              Close
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-      {/* --- End History Dialog -- */}
 
     </div>
   )

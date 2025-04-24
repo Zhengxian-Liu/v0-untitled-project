@@ -10,8 +10,31 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import type React from "react"
 
-export function MainNav() {
+// --- Define Props --- M
+interface MainNavProps {
+  currentLanguage: string;
+  setCurrentLanguage: (lang: string) => void;
+}
+
+export function MainNav({ currentLanguage, setCurrentLanguage }: MainNavProps) {
+  // --- Map workspace values to language codes --- M
+  const workspaceToLang: { [key: string]: string } = {
+    japanese: "ja",
+    spanish: "es",
+    french: "fr",
+    german: "de",
+    // Add other languages as needed
+  };
+  const langToWorkspace = Object.fromEntries(Object.entries(workspaceToLang).map(([k, v]) => [v, k]));
+  // --- End Map ---
+
+  const handleLanguageChange = (workspaceValue: string) => {
+    const langCode = workspaceToLang[workspaceValue] || "en"; // Default to 'en' if mapping fails
+    setCurrentLanguage(langCode);
+  };
+
   return (
     <header className="border-b">
       <div className="flex h-16 items-center px-6">
@@ -19,7 +42,10 @@ export function MainNav() {
           <Link href="/" className="font-semibold text-xl">
             PromptCraft
           </Link>
-          <Select defaultValue="japanese">
+          <Select
+            value={langToWorkspace[currentLanguage] || "japanese"}
+            onValueChange={handleLanguageChange}
+          >
             <SelectTrigger className="w-[180px]">
               <SelectValue placeholder="Select workspace" />
             </SelectTrigger>

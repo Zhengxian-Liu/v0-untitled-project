@@ -577,10 +577,12 @@ export function EvaluationPanel({ currentLanguage }: EvaluationPanelProps) {
     // TODO: Replace with actual saving state indicator
     toast.info("Saving evaluation session...");
 
-    // 2. Call Backend (Endpoint TBD)
+    // 2. Call Backend
     try {
-      // Placeholder for the actual API endpoint
-      const response = await fetch(`/api/v1/evaluation-sessions/`, { // << ENDPOINT DOES NOT EXIST YET
+      // --- FIX: Use Absolute Backend URL --- M
+      const backendUrl = "http://localhost:8000/api/v1/evaluation-sessions";
+      const response = await fetch(backendUrl, {
+      // --- End FIX ---
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(sessionData),

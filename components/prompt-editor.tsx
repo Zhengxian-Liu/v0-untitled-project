@@ -31,9 +31,8 @@ import {
   BookmarkPlus,
   Bookmark,
   AlertTriangle,
-  History,
 } from "lucide-react"
-import type { Prompt, PromptSection, SavedSection, PromptHistory, ProductionPrompt } from "@/types"
+import type { Prompt, PromptSection, SavedSection, ProductionPrompt } from "@/types"
 import { toast } from "sonner"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -173,21 +172,21 @@ const mockProductionPrompts: ProductionPrompt[] = [
   },
 ]
 
-// --- Define Props Type --- M
+// --- Update Props Type --- M
 interface PromptEditorProps {
   prompt: Prompt | null;
-  onSaveSuccess?: () => void; // Make callback optional
+  onSaveSuccess?: () => void;
+  currentLanguage: string; // Add currentLanguage prop
 }
 
 // --- Constant for Select placeholder value --- M
 const SELECT_PLACEHOLDER_VALUE = "--none--";
 
-// Use the Props type
-export function PromptEditor({ prompt, onSaveSuccess }: PromptEditorProps) {
+// Use the updated Props type
+export function PromptEditor({ prompt, onSaveSuccess, currentLanguage }: PromptEditorProps) {
   const [name, setName] = useState("")
   const [description, setDescription] = useState("")
   const [selectedProject, setSelectedProject] = useState<string | undefined>(undefined)
-  const [selectedLanguage, setSelectedLanguage] = useState<string | undefined>(undefined)
   const [isProduction, setIsProduction] = useState(false)
   const [selectedTags, setSelectedTags] = useState<string[]>([])
   const [version, setVersion] = useState("1.0")
@@ -202,17 +201,11 @@ export function PromptEditor({ prompt, onSaveSuccess }: PromptEditorProps) {
   const [showInsertSectionDialog, setShowInsertSectionDialog] = useState(false)
   const [showPreview, setShowPreview] = useState(false)
 
-  // --- Re-introduce state for production check --- M
+  // --- Restore state for production check --- M
   const [currentProductionPrompt, setCurrentProductionPrompt] = useState<Prompt | null>(null)
   const [isLoadingProductionCheck, setIsLoadingProductionCheck] = useState(false)
   const [showProductionConfirmDialog, setShowProductionConfirmDialog] = useState(false)
-  // --- End re-introduction ---
-
-  // --- State for History --- M
-  const [showHistoryDialog, setShowHistoryDialog] = useState(false);
-  const [promptHistory, setPromptHistory] = useState<PromptHistory[]>([]);
-  const [isLoadingHistory, setIsLoadingHistory] = useState(false);
-  // --- End History State ---
+  // --- End Restore ---
 
   useEffect(() => {
     if (prompt) {
@@ -222,7 +215,6 @@ export function PromptEditor({ prompt, onSaveSuccess }: PromptEditorProps) {
       setSections(prompt.sections && prompt.sections.length > 0 ? prompt.sections : [])
       setSelectedTags(prompt.tags || [])
       setSelectedProject(prompt.project)
-      setSelectedLanguage(prompt.language)
       setIsProduction(prompt.isProduction || false)
       setVersion(prompt.version || "1.0")
     } else {
@@ -232,7 +224,6 @@ export function PromptEditor({ prompt, onSaveSuccess }: PromptEditorProps) {
       setIsProduction(false)
       setSelectedTags([])
       setSelectedProject(undefined)
-      setSelectedLanguage(undefined)
       setVersion("1.0")
       setSections([
         { id: "1", type: "role", name: "Role Definition", content: "" },
@@ -242,44 +233,38 @@ export function PromptEditor({ prompt, onSaveSuccess }: PromptEditorProps) {
     }
   }, [prompt])
 
-  // --- NEW: Effect to check for existing production prompt --- M
+  // --- Restore Effect to check for existing production prompt (using fixed language 'en') --- M
   useEffect(() => {
     const fetchCurrentProductionPrompt = async () => {
-      if (selectedProject && selectedLanguage) {
+      if (selectedProject && currentLanguage) {
         setIsLoadingProductionCheck(true);
         setCurrentProductionPrompt(null); // Reset before fetching
         try {
-          const url = `http://localhost:8000/api/v1/prompts/production/?project=${encodeURIComponent(selectedProject)}&language=${encodeURIComponent(selectedLanguage)}`;
+          const url = `http://localhost:8000/api/v1/prompts/production/?project=${encodeURIComponent(selectedProject)}&language=${encodeURIComponent(currentLanguage)}`;
           const response = await fetch(url);
 
           if (response.ok) {
             const data: Prompt = await response.json();
             setCurrentProductionPrompt(data);
-            console.log("Found current production prompt:", data);
           } else if (response.status === 404) {
-            // 404 is expected if no production prompt exists
             setCurrentProductionPrompt(null);
-            console.log("No existing production prompt found for:", selectedProject, selectedLanguage);
           } else {
-            // Handle other errors
             console.error("Error fetching production prompt status:", response.statusText);
-             setCurrentProductionPrompt(null); // Assume none on error
+            setCurrentProductionPrompt(null);
           }
         } catch (error) {
           console.error("Failed to fetch production prompt status:", error);
-           setCurrentProductionPrompt(null); // Assume none on error
+          setCurrentProductionPrompt(null);
         } finally {
           setIsLoadingProductionCheck(false);
         }
       } else {
-        // If project or language is not selected, there's no specific production prompt to check
         setCurrentProductionPrompt(null);
       }
     };
-
     fetchCurrentProductionPrompt();
-  }, [selectedProject, selectedLanguage]);
-  // --- End NEW Effect ---
+  }, [selectedProject, currentLanguage]);
+  // --- End Restore Effect ---
 
   const handleTagToggle = (tag: string) => {
     if (selectedTags.includes(tag)) {
@@ -412,61 +397,61 @@ export function PromptEditor({ prompt, onSaveSuccess }: PromptEditorProps) {
       .join("\n\n")
   }
 
-  // --- MODIFIED: Restore production check logic --- M
+  // --- Restore handleProductionChange with Dialog logic --- M
   const handleProductionChange = (checked: boolean) => {
-    // Check if we are trying to set THIS prompt to production
     if (checked) {
-       // Check if there IS a current production prompt AND it's DIFFERENT from the one being edited
+       // Check if a *different* production prompt exists for this project (and fixed language)
        if (currentProductionPrompt && currentProductionPrompt.id !== prompt?.id) {
-           // If yes, show the confirmation dialog
-           setShowProductionConfirmDialog(true);
+           setShowProductionConfirmDialog(true); // Show dialog
        } else {
-           // Otherwise (no existing or editing the existing one), just set the state directly
-           setIsProduction(true);
+           setIsProduction(true); // Set state directly
        }
     } else {
-        // If unchecking, always allow setting state directly
-        setIsProduction(false);
+        setIsProduction(false); // Always allow unchecking
     }
   };
 
-  // Re-introduce the confirmation handler
+  // Restore the confirmation handler
   const confirmProductionChange = () => {
-    setIsProduction(true); // Set the state
-    setShowProductionConfirmDialog(false); // Close the dialog
-    // The actual backend update happens in handleSave
+    setIsProduction(true);
+    setShowProductionConfirmDialog(false);
   };
-  // --- End MODIFICATION ---
+  // --- End Restore ---
 
-  // --- NEW: Handler for saving the prompt ---
   const handleSave = async () => {
     console.log("Save button clicked!");
 
-    // --- MODIFIED: Differentiate between Create (POST) and Update (PUT) ---
-    const isUpdating = !!prompt;
-    const promptId = prompt?.id; // Get ID if updating
-    const method = isUpdating ? "PUT" : "POST";
-    const url = isUpdating
-      ? `http://localhost:8000/api/v1/prompts/${promptId}`
-      : "http://localhost:8000/api/v1/prompts/";
-    // --- End MODIFICATION ---
+    // --- MODIFIED: Handle both Create (POST) and Save New Version (PUT) --- M
+    const isCreatingNew = !prompt; // True if prompt prop is null
+    const method = isCreatingNew ? "POST" : "PUT";
+    const url = isCreatingNew
+      ? "http://localhost:8000/api/v1/prompts/"
+      : `http://localhost:8000/api/v1/prompts/${prompt.id}`; // Use prompt.id for PUT base
 
-    const promptData = {
+    // Payload preparation - needs slight adjustment based on method
+    const basePayload = {
       name: name,
       description: description,
       sections: sections,
       tags: selectedTags,
       project: selectedProject || null,
-      language: selectedLanguage || null,
+      language: currentLanguage,
       isProduction: isProduction,
-      version: version,
+      // version: version, // Don't send version - backend handles it
     };
+
+    // For PUT, the payload matches PromptUpdate (all optional)
+    // For POST, the payload matches PromptCreate (all required from PromptBase)
+    // Our basePayload includes everything needed for PromptCreate implicitly.
+    const promptData = basePayload;
+
+    // --- End MODIFICATION ---
 
     console.log(`Attempting to ${method} prompt data to ${url}:`, promptData);
 
     try {
       const response = await fetch(url, {
-        method: method, // Use dynamic method
+        method: method,
         headers: {
           "Content-Type": "application/json",
         },
@@ -481,86 +466,29 @@ export function PromptEditor({ prompt, onSaveSuccess }: PromptEditorProps) {
         } catch (e) { /* Ignore JSON parsing error */ }
         console.error("Failed to save prompt:", errorDetail);
         toast.error(`Error saving prompt: ${errorDetail}`);
-        return;
-      }
-
-      const savedPrompt = await response.json();
-      console.log("Prompt saved successfully:", savedPrompt);
-      toast.success("Prompt saved successfully!");
-
-      // --- Call the success callback if provided --- M
-      if (onSaveSuccess) {
-        onSaveSuccess();
-      }
-      // --- End callback --- M
-
-    } catch (error) {
-      console.error("Error saving prompt:", error);
-      toast.error(`An unexpected error occurred: ${error}`);
-    }
-  };
-  // --- End NEW handler ---
-
-  // --- History Handlers --- M
-  const fetchHistory = async () => {
-    if (!prompt?.id) return; // Need a prompt ID
-
-    setIsLoadingHistory(true);
-    try {
-      const response = await fetch(`http://localhost:8000/api/v1/prompts/${prompt.id}/history`);
-      if (!response.ok) {
-        throw new Error(`Failed to fetch history: ${response.statusText}`);
-      }
-      const data = await response.json();
-      // TODO: Validate data against PromptHistory type from backend
-      setPromptHistory(data as PromptHistory[]);
-      setShowHistoryDialog(true); // Open dialog only after successful fetch
-    } catch (error) {
-      console.error("Error fetching prompt history:", error);
-      toast.error(`Failed to load history: ${error instanceof Error ? error.message : error}`);
-      setShowHistoryDialog(false); // Ensure dialog is closed on error
-    } finally {
-      setIsLoadingHistory(false);
-    }
-  };
-
-  const handleRestore = async (historyId: string) => {
-    if (!prompt?.id) return;
-
-    console.log(`Restoring prompt ${prompt.id} from history ${historyId}`);
-    try {
-      const response = await fetch(`http://localhost:8000/api/v1/prompts/${prompt.id}/restore/${historyId}`, {
-        method: "POST",
-      });
-
-      if (!response.ok) {
-        let errorDetail = `HTTP error! status: ${response.status}`;
-        try {
-            const errorData = await response.json();
-            errorDetail = errorData.detail || errorDetail;
-        } catch (e) { /* Ignore JSON parsing error */ }
         throw new Error(errorDetail);
       }
 
-      const restoredPrompt = await response.json();
-      console.log("Prompt restored successfully:", restoredPrompt);
-      toast.success("Prompt restored successfully!");
+      const savedPromptVersion: Prompt = await response.json();
+      const successMessage = isCreatingNew
+        ? `Prompt created successfully as version ${savedPromptVersion.version}!`
+        : `Prompt saved successfully as new version ${savedPromptVersion.version}!`;
+      toast.success(successMessage);
 
-      // Close history dialog and trigger library refresh
-      setShowHistoryDialog(false);
+      // Update local state
+      setVersion(savedPromptVersion.version || "?.?");
+      // If creating, maybe update the 'prompt' prop reference somehow?
+      // For now, rely on library refresh via onSaveSuccess
+
       if (onSaveSuccess) {
-        onSaveSuccess(); // This will remount editor via MainLayout key change
+        onSaveSuccess();
       }
-       // Optionally, update the editor state directly, but remounting is simpler
-       // setName(restoredPrompt.name);
-       // ... set other states ...
 
     } catch (error) {
-        console.error("Error restoring prompt:", error);
-        toast.error(`Failed to restore prompt: ${error instanceof Error ? error.message : error}`);
+      console.error(`Error ${isCreatingNew ? 'creating' : 'saving'} prompt:`, error);
+      toast.error(`Failed to ${isCreatingNew ? 'create' : 'save'} prompt: ${error instanceof Error ? error.message : error}`);
     }
   };
-  // --- End History Handlers ---
 
   return (
     <div className="space-y-6">
@@ -572,25 +500,10 @@ export function PromptEditor({ prompt, onSaveSuccess }: PromptEditorProps) {
           <Button variant="outline" size="sm" onClick={() => setShowPreview(!showPreview)}>
             {showPreview ? "Hide Preview" : "Show Preview"}
           </Button>
-          <div className="flex items-center gap-1 border rounded-md px-2 py-1">
-            <span className="text-sm text-muted-foreground">Version:</span>
-            <Input
-              type="text"
-              value={version}
-              onChange={(e) => setVersion(e.target.value)}
-              className="h-6 w-16 text-sm border-none focus-visible:ring-0 focus-visible:ring-offset-0 px-1"
-              aria-label="Prompt Version"
-            />
+          <div className="flex items-center border rounded-md px-2 py-1 h-9">
+            <span className="text-sm text-muted-foreground mr-1">Version:</span>
+            <span className="text-sm font-medium">{version}</span>
           </div>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={fetchHistory}
-            disabled={!prompt || isLoadingHistory}
-          >
-            <History className="mr-2 h-4 w-4" />
-            {isLoadingHistory ? "Loading..." : "View History"}
-          </Button>
         </div>
       </div>
 
@@ -627,28 +540,6 @@ export function PromptEditor({ prompt, onSaveSuccess }: PromptEditorProps) {
                   <SelectItem key={project.id} value={project.id}>
                     {project.name}
                   </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="grid gap-2">
-            <Label htmlFor="language">Language</Label>
-            <Select
-              value={selectedLanguage ?? SELECT_PLACEHOLDER_VALUE}
-              onValueChange={(value) => setSelectedLanguage(value === SELECT_PLACEHOLDER_VALUE ? undefined : value)}
-            >
-              <SelectTrigger id="language">
-                <SelectValue placeholder="Select language" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={SELECT_PLACEHOLDER_VALUE}>-- None --</SelectItem>
-                {availableLanguages.map((language) => (
-                  language.id !== 'all' && (
-                    <SelectItem key={language.id} value={language.id}>
-                      {language.name}
-                    </SelectItem>
-                  )
                 ))}
               </SelectContent>
             </Select>
@@ -914,13 +805,13 @@ export function PromptEditor({ prompt, onSaveSuccess }: PromptEditorProps) {
         </DialogContent>
       </Dialog>
 
+      {/* --- Restore Production Confirm Dialog --- M */}
       <Dialog open={showProductionConfirmDialog} onOpenChange={setShowProductionConfirmDialog}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Change Production Prompt?</DialogTitle>
             <DialogDescription>
-              There is already a production prompt for the selected project and language:
-              <span className="font-semibold block mt-2">{currentProductionPrompt?.name}</span>
+              There is already a production prompt ({currentProductionPrompt?.name}) for the selected project and language ({currentLanguage}).
             </DialogDescription>
           </DialogHeader>
           <div className="py-4">
@@ -939,63 +830,7 @@ export function PromptEditor({ prompt, onSaveSuccess }: PromptEditorProps) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
-      {/* --- History Dialog --- M */}
-      <Dialog open={showHistoryDialog} onOpenChange={setShowHistoryDialog}>
-        <DialogContent className="sm:max-w-[60%]"> {/* Make dialog wider */} 
-          <DialogHeader>
-            <DialogTitle>Prompt History for: {prompt?.name}</DialogTitle>
-            <DialogDescription>
-              Select a previous version to view its details or restore it.
-            </DialogDescription>
-          </DialogHeader>
-          <ScrollArea className="h-[50vh] w-full rounded-md border p-4">
-            {promptHistory.length > 0 ? (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Saved At</TableHead>
-                    <TableHead>Version</TableHead>
-                    <TableHead>Description</TableHead>
-                    <TableHead>Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {promptHistory.map((historyItem) => {
-                    // --- Add Log --- M
-                    console.log("History Dialog: Rendering row for history item:", historyItem);
-                    // --- End Log ---
-                    return (
-                      <TableRow key={historyItem.id ?? Math.random()}> {/* Use random key if id is missing to avoid warning, but ID *should* exist */}
-                        <TableCell>{new Date(historyItem.saved_at).toLocaleString()}</TableCell>
-                        <TableCell>v{historyItem.version}</TableCell>
-                        <TableCell className="truncate max-w-xs">{historyItem.description || "-"}</TableCell>
-                        <TableCell>
-                          <Button
-                             variant="outline"
-                             size="sm"
-                             onClick={() => handleRestore(historyItem.id)} // Pass the ID here
-                           >
-                             Restore
-                           </Button>
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
-            ) : (
-              <p className="text-center text-muted-foreground">No history found for this prompt.</p>
-            )}
-          </ScrollArea>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowHistoryDialog(false)}>
-              Close
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-      {/* --- End History Dialog -- */}
+      {/* --- End Restore --- */}
 
     </div>
   )

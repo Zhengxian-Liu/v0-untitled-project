@@ -12,11 +12,13 @@ import { Sidebar } from "@/components/sidebar"
 import { Button } from "@/components/ui/button"
 import { PlusCircle } from "lucide-react"
 import type { Prompt } from "@/types"
+import { SavedSessionsList } from "@/components/saved-sessions-list"
 
 export function MainLayout({ children }: { children: React.ReactNode }) {
   const [activeTab, setActiveTab] = useState("library")
   const [selectedPrompt, setSelectedPrompt] = useState<Prompt | null>(null)
   const [refreshKey, setRefreshKey] = useState(0)
+  const [currentLanguage, setCurrentLanguage] = useState<string>("ja")
 
   const handlePromptSelect = (prompt: Prompt) => {
     setSelectedPrompt(prompt)
@@ -35,7 +37,10 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="flex min-h-screen flex-col">
-      <MainNav />
+      <MainNav
+        currentLanguage={currentLanguage}
+        setCurrentLanguage={setCurrentLanguage}
+      />
       <div className="flex flex-1">
         <Sidebar />
         <main className="flex-1 p-6">
@@ -46,20 +51,34 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
                   <TabsTrigger value="library">Prompt Library</TabsTrigger>
                   <TabsTrigger value="editor" disabled={activeTab !== 'editor' && !selectedPrompt}>Prompt Editor</TabsTrigger>
                   <TabsTrigger value="evaluate">Evaluate</TabsTrigger>
+                  <TabsTrigger value="saved-sessions">Saved Sessions</TabsTrigger>
                 </TabsList>
-                <Button onClick={handleNewPrompt} className="ml-auto">
-                  <PlusCircle className="mr-2 h-4 w-4" />
-                  New Prompt
-                </Button>
+                {(activeTab === 'library' || activeTab === 'editor') && (
+                    <Button onClick={handleNewPrompt} className="ml-auto">
+                      <PlusCircle className="mr-2 h-4 w-4" />
+                      New Prompt
+                    </Button>
+                )}
               </div>
               <TabsContent value="library" className="mt-6">
-                <PromptLibrary key={refreshKey} onPromptSelect={handlePromptSelect} />
+                <PromptLibrary
+                  key={refreshKey}
+                  onPromptSelect={handlePromptSelect}
+                  currentLanguage={currentLanguage}
+                />
               </TabsContent>
               <TabsContent value="editor" className="mt-6">
-                <PromptEditor prompt={selectedPrompt} onSaveSuccess={triggerLibraryRefresh} />
+                <PromptEditor
+                  prompt={selectedPrompt}
+                  onSaveSuccess={triggerLibraryRefresh}
+                  currentLanguage={currentLanguage}
+                />
               </TabsContent>
               <TabsContent value="evaluate" className="mt-6">
-                <EvaluationPanel />
+                <EvaluationPanel currentLanguage={currentLanguage} />
+              </TabsContent>
+              <TabsContent value="saved-sessions" className="mt-6">
+                <SavedSessionsList />
               </TabsContent>
             </Tabs>
           </div>

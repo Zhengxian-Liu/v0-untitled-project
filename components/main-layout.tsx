@@ -16,6 +16,7 @@ import type { Prompt } from "@/types"
 export function MainLayout({ children }: { children: React.ReactNode }) {
   const [activeTab, setActiveTab] = useState("library")
   const [selectedPrompt, setSelectedPrompt] = useState<Prompt | null>(null)
+  const [refreshKey, setRefreshKey] = useState(0)
 
   const handlePromptSelect = (prompt: Prompt) => {
     setSelectedPrompt(prompt)
@@ -25,6 +26,11 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
   const handleNewPrompt = () => {
     setSelectedPrompt(null)
     setActiveTab("editor")
+  }
+
+  const triggerLibraryRefresh = () => {
+    console.log("Triggering library refresh...")
+    setRefreshKey(prevKey => prevKey + 1)
   }
 
   return (
@@ -38,7 +44,7 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
               <div className="flex items-center justify-between">
                 <TabsList>
                   <TabsTrigger value="library">Prompt Library</TabsTrigger>
-                  <TabsTrigger value="editor">Prompt Editor</TabsTrigger>
+                  <TabsTrigger value="editor" disabled={activeTab !== 'editor' && !selectedPrompt}>Prompt Editor</TabsTrigger>
                   <TabsTrigger value="evaluate">Evaluate</TabsTrigger>
                 </TabsList>
                 <Button onClick={handleNewPrompt} className="ml-auto">
@@ -47,10 +53,10 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
                 </Button>
               </div>
               <TabsContent value="library" className="mt-6">
-                <PromptLibrary onPromptSelect={handlePromptSelect} />
+                <PromptLibrary key={refreshKey} onPromptSelect={handlePromptSelect} />
               </TabsContent>
               <TabsContent value="editor" className="mt-6">
-                <PromptEditor prompt={selectedPrompt} />
+                <PromptEditor prompt={selectedPrompt} onSaveSuccess={triggerLibraryRefresh} />
               </TabsContent>
               <TabsContent value="evaluate" className="mt-6">
                 <EvaluationPanel />

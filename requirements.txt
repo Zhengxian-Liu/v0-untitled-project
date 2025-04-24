@@ -1,0 +1,11 @@
+fastapi
+uvicorn[standard]
+motor
+anthropic
+pydantic[email]
+pydantic-settings
+python-dotenv
+
+# For optional CSV/Excel upload later
+# pandas
+# openpyxl 

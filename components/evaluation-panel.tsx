@@ -262,20 +262,71 @@ export function EvaluationPanel({ currentLanguage }: EvaluationPanelProps) {
   // --- End Update Handlers ---
 
   // Handle score change
-  const handleScoreChange = (resultId: string, columnId: string, score: number) => {
+  const handleScoreChange = async (resultId: string, columnId: string, score: number) => {
+    // Optimistic UI Update
     setEvaluationResults(prevResults => prevResults.map(res =>
        res.id === resultId ? { ...res, score: score } : res
     ));
-    console.log(`TODO: Update score for result ${resultId} to ${score}`);
-  }
+
+    // --- Call Backend API --- M
+    console.log(`Updating score for result ${resultId} to ${score}`);
+    try {
+        const response = await fetch(`http://localhost:8000/api/v1/evaluations/results/${resultId}`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ score: score })
+        });
+        if (!response.ok) {
+            let errorDetail = `HTTP error! Status: ${response.status}`;
+            try {
+                const errorData = await response.json();
+                errorDetail = errorData.detail || errorDetail;
+            } catch (e) { /* Ignore */ }
+            throw new Error(errorDetail);
+        }
+        // Success - state is already updated optimistically
+        // Optionally show a subtle success indicator?
+    } catch (error) {
+        console.error(`Failed to update score for result ${resultId}:`, error);
+        toast.error(`Failed to save score: ${error instanceof Error ? error.message : "Unknown error"}`);
+        // TODO: Optionally revert optimistic update here
+        // setEvaluationResults(prevResults => ... ); // Revert back to original score
+    }
+    // --- End API Call ---
+  };
 
   // Handle comment change
-  const handleCommentChange = (resultId: string, columnId: string, comment: string) => {
-    setEvaluationResults(prevResults => prevResults.map(res =>
-       res.id === resultId ? { ...res, comment: comment } : res
-    ));
-    console.log(`TODO: Update comment for result ${resultId} to ${comment}`);
-  }
+  const handleCommentChange = async (resultId: string, columnId: string, comment: string) => {
+       // Optimistic UI Update
+       setEvaluationResults(prevResults => prevResults.map(res =>
+         res.id === resultId ? { ...res, comment: comment } : res
+      ));
+
+      // --- Call Backend API --- M
+      // TODO: Implement debouncing for comment input later
+      console.log(`Updating comment for result ${resultId}`);
+      try {
+          const response = await fetch(`http://localhost:8000/api/v1/evaluations/results/${resultId}`, {
+              method: "PUT",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ comment: comment })
+          });
+          if (!response.ok) {
+              let errorDetail = `HTTP error! Status: ${response.status}`;
+              try {
+                  const errorData = await response.json();
+                  errorDetail = errorData.detail || errorDetail;
+              } catch (e) { /* Ignore */ }
+              throw new Error(errorDetail);
+          }
+          // Success - state is already updated optimistically
+      } catch (error) {
+          console.error(`Failed to update comment for result ${resultId}:`, error);
+          toast.error(`Failed to save comment: ${error instanceof Error ? error.message : "Unknown error"}`);
+          // TODO: Optionally revert optimistic update here
+      }
+      // --- End API Call ---
+  };
 
   // Get prompt name and version by ID
   const getPromptInfo = (versionId: string | null) => {

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
@@ -11,34 +11,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Download, Upload, Plus, Play, Trash2, Eye, EyeOff, Settings } from "lucide-react"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-
-// Mock data for prompts
-const mockPrompts = [
-  {
-    id: "1",
-    name: "Technical Documentation Translation",
-    version: "1.2",
-    text: "You are a technical translator specializing in [SOURCE_LANGUAGE] to [TARGET_LANGUAGE] translations. Translate the following technical documentation, maintaining all technical terminology accurately. Preserve formatting such as bullet points and numbered lists. If specific technical terms should not be translated, keep them in the original language and format them in italics.",
-  },
-  {
-    id: "2",
-    name: "Marketing Content Translation",
-    version: "2.1",
-    text: "You are a marketing translator specializing in adapting persuasive content from [SOURCE_LANGUAGE] to [TARGET_LANGUAGE]. Translate the following marketing content, maintaining the emotional impact and persuasive elements. Adapt cultural references as needed to resonate with the target audience. Preserve the tone, style, and brand voice of the original content.",
-  },
-  {
-    id: "3",
-    name: "Game Dialogue Translation",
-    version: "1.0",
-    text: "You are a game localization specialist translating from [SOURCE_LANGUAGE] to [TARGET_LANGUAGE]. Translate the following game dialogue, maintaining the character's personality and tone. Adapt cultural references and jokes to resonate with the target audience while preserving the original meaning and emotional impact.",
-  },
-  {
-    id: "4",
-    name: "Character Voice Translation",
-    version: "1.5",
-    text: "You are a character voice translator specializing in [SOURCE_LANGUAGE] to [TARGET_LANGUAGE] translations for games. Translate the following character lines while preserving their unique speech patterns, catchphrases, and personality traits. Ensure the translation sounds natural and authentic in the target language.",
-  },
-]
+import type { Prompt } from "@/types"
+import { ScrollArea } from "@/components/ui/scroll-area"
 
 // Mock data for AI models
 const mockModels = [
@@ -143,8 +117,8 @@ export function EvaluationPanel({ currentLanguage }: EvaluationPanelProps) {
 
   // State for evaluation columns
   const [columns, setColumns] = useState<EvaluationColumn[]>([
-    { id: "col1", promptId: "1", modelId: "1", showPrompt: false },
-    { id: "col2", promptId: "2", modelId: "1", showPrompt: false },
+    { id: "col1", promptId: "", modelId: "1", showPrompt: false },
+    { id: "col2", promptId: "", modelId: "1", showPrompt: false },
   ])
 
   // State for results
@@ -157,6 +131,59 @@ export function EvaluationPanel({ currentLanguage }: EvaluationPanelProps) {
     { id: "zenless", name: "Zenless Zone Zero" },
   ]
 
+  // --- State for Fetched Prompts --- M
+  const [availablePrompts, setAvailablePrompts] = useState<Prompt[]>([]);
+  const [isLoadingPrompts, setIsLoadingPrompts] = useState(true);
+  const [promptsError, setPromptsError] = useState<string | null>(null);
+  // --- End Prompt State ---
+
+  // --- Fetch Prompts Effect --- M
+  useEffect(() => {
+    const fetchPrompts = async () => {
+      setIsLoadingPrompts(true);
+      setPromptsError(null);
+      try {
+        // Fetch prompts relevant to the current language context?
+        // Adjust API endpoint if filtering by language is possible/needed
+        // const fetchUrl = `/api/v1/prompts/?language=${currentLanguage}`;
+        const fetchUrl = `http://localhost:8000/api/v1/prompts/`; // Fetch all for now
+
+        const response = await fetch(fetchUrl);
+        if (!response.ok) {
+          throw new Error(`Failed to fetch prompts: ${response.statusText}`);
+        }
+        const data = await response.json();
+        setAvailablePrompts(data as Prompt[]);
+
+        // --- Initialize default columns with fetched prompts --- M
+        if (data.length > 0) {
+            setColumns((prevColumns) => {
+                // Only update if default columns haven't been changed by user yet
+                // Or maybe always update if prompts change? For now, initialize.
+                if (prevColumns.every(col => col.promptId === "")) {
+                    return [
+                        { id: "col1", promptId: data[0].id, modelId: "1", showPrompt: false },
+                        // Use second prompt if available, else first again
+                        { id: "col2", promptId: data[1]?.id ?? data[0].id, modelId: "1", showPrompt: false },
+                    ]
+                }
+                return prevColumns;
+            });
+        }
+        // --- End Initialize ---
+
+      } catch (err) {
+        console.error("Failed to fetch prompts for evaluation panel:", err);
+        setPromptsError(err instanceof Error ? err.message : "An unknown error occurred");
+      } finally {
+        setIsLoadingPrompts(false);
+      }
+    };
+    fetchPrompts();
+  // Add currentLanguage as dependency if API filtering is added later
+  }, []); // Run once on mount
+  // --- End Fetch Prompts ---
+
   // Handle adding a new column
   const handleAddColumn = () => {
     const newColumnId = `col${Date.now()}`
@@ -164,7 +191,7 @@ export function EvaluationPanel({ currentLanguage }: EvaluationPanelProps) {
       ...columns,
       {
         id: newColumnId,
-        promptId: mockPrompts[0].id,
+        promptId: availablePrompts[0].id,
         modelId: "1",
         showPrompt: false,
       },
@@ -258,14 +285,18 @@ export function EvaluationPanel({ currentLanguage }: EvaluationPanelProps) {
 
   // Get prompt name and version by ID
   const getPromptInfo = (promptId: string) => {
-    const prompt = mockPrompts.find((p) => p.id === promptId)
-    return prompt ? `${prompt.name} (v${prompt.version})` : "Unknown Prompt"
+    const prompt = availablePrompts.find((p) => p.id === promptId);
+    return prompt ? `${prompt.name} (v${prompt.version || '?.?'})` : "Select Prompt"; // Handle not found
   }
 
   // Get prompt text by ID
   const getPromptText = (promptId: string) => {
-    const prompt = mockPrompts.find((p) => p.id === promptId)
-    return prompt ? prompt.text : ""
+    const prompt = availablePrompts.find((p) => p.id === promptId);
+    // Use sections if available and format, otherwise use text, fallback to empty
+    if (prompt?.sections && prompt.sections.length > 0) {
+        return prompt.sections.map(sec => `### ${sec.name}\n${sec.content}`).join('\n\n');
+    }
+    return prompt?.text || "No prompt text available"; // Handle missing text
   }
 
   // Get model name by ID
@@ -433,14 +464,22 @@ export function EvaluationPanel({ currentLanguage }: EvaluationPanelProps) {
                   <TableHead key={column.id} className="min-w-[250px]">
                     <div className="space-y-2">
                       <div className="flex items-center justify-between">
-                        <Select value={column.promptId} onValueChange={(value) => handleChangePrompt(column.id, value)}>
+                        <Select
+                          value={column.promptId}
+                          onValueChange={(value) => handleChangePrompt(column.id, value)}
+                          disabled={isLoadingPrompts}
+                        >
                           <SelectTrigger className="h-8 w-[180px]">
-                            <SelectValue placeholder="Select prompt" />
+                            <SelectValue placeholder="Select prompt">
+                              {getPromptInfo(column.promptId)}
+                            </SelectValue>
                           </SelectTrigger>
                           <SelectContent>
-                            {mockPrompts.map((prompt) => (
+                            {isLoadingPrompts && <SelectItem value="loading" disabled>Loading...</SelectItem>}
+                            {promptsError && <SelectItem value="error" disabled>Error loading</SelectItem>}
+                            {!isLoadingPrompts && !promptsError && availablePrompts.map((prompt) => (
                               <SelectItem key={prompt.id} value={prompt.id}>
-                                {prompt.name} (v{prompt.version})
+                                {prompt.name}
                               </SelectItem>
                             ))}
                           </SelectContent>
@@ -481,12 +520,13 @@ export function EvaluationPanel({ currentLanguage }: EvaluationPanelProps) {
                         </Select>
                       </div>
 
+                      {/* Prompt Preview */}
                       {column.showPrompt && (
-                        <div className="p-2 border rounded-md bg-muted/50 mt-2">
-                          <p className="text-xs font-mono whitespace-pre-wrap line-clamp-4">
+                        <ScrollArea className="h-[100px] w-full rounded-md border bg-muted/50 mt-2 p-2">
+                          <p className="text-xs font-mono whitespace-pre-wrap">
                             {getPromptText(column.promptId)}
                           </p>
-                        </div>
+                        </ScrollArea>
                       )}
                     </div>
                   </TableHead>

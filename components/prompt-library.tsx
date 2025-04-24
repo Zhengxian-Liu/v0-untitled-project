@@ -1,63 +1,12 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Input } from "@/components/ui/input"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
 import { CheckCircle2 } from "lucide-react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import type { Prompt } from "@/types"
-
-const mockPrompts: Prompt[] = [
-  {
-    id: "1",
-    name: "Technical Documentation Translation",
-    description: "Optimized for technical manuals and documentation",
-    lastModified: "2023-04-15",
-    tags: ["Technical", "Formal"],
-    version: "1.2",
-    isProduction: true,
-    project: "genshin",
-    language: "ja",
-    text: "You are a technical translator specializing in [SOURCE_LANGUAGE] to [TARGET_LANGUAGE] translations. Translate the following technical documentation, maintaining all technical terminology accurately. Preserve formatting such as bullet points and numbered lists. If specific technical terms should not be translated, keep them in the original language and format them in italics.",
-  },
-  {
-    id: "2",
-    name: "Marketing Content Translation",
-    description: "For creative and persuasive marketing materials",
-    lastModified: "2023-04-10",
-    tags: ["Marketing", "Casual"],
-    version: "2.1",
-    isProduction: true,
-    project: "honkai",
-    language: "fr",
-    text: "You are a marketing translator specializing in adapting persuasive content from [SOURCE_LANGUAGE] to [TARGET_LANGUAGE]. Translate the following marketing content, maintaining the emotional impact and persuasive elements. Adapt cultural references as needed to resonate with the target audience. Preserve the tone, style, and brand voice of the original content.",
-  },
-  {
-    id: "3",
-    name: "Legal Document Translation",
-    description: "For contracts and legal documents",
-    lastModified: "2023-04-05",
-    tags: ["Legal", "Formal"],
-    version: "1.0",
-    isProduction: true,
-    project: "zenless",
-    language: "es",
-    text: "You are a legal translator specializing in [SOURCE_LANGUAGE] to [TARGET_LANGUAGE] translations. Translate the following legal document with precision, maintaining all legal terminology accurately. Preserve the formal structure and formatting of the document. If specific legal terms have established equivalents in the target language, use those equivalents consistently.",
-  },
-  {
-    id: "4",
-    name: "Conversational AI Translation",
-    description: "For chatbot and conversational AI content",
-    lastModified: "2023-04-01",
-    tags: ["Conversational", "Casual"],
-    version: "1.5",
-    isProduction: false,
-    project: "genshin",
-    language: "en",
-    text: "You are a translator specializing in conversational content from [SOURCE_LANGUAGE] to [TARGET_LANGUAGE]. Translate the following conversational exchanges, maintaining the natural flow and tone of a conversation. Adapt idioms and expressions to sound natural in the target language. Preserve the level of formality or informality present in the original text.",
-  },
-]
 
 const availableLanguages = [
   { id: "all", name: "All Languages" },
@@ -74,19 +23,40 @@ const availableLanguages = [
 ]
 
 export function PromptLibrary({ onPromptSelect }: { onPromptSelect?: (prompt: Prompt) => void }) {
+  const [prompts, setPrompts] = useState<Prompt[]>([])
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedProject, setSelectedProject] = useState("all")
   const [selectedLanguage, setSelectedLanguage] = useState("all")
   const [showProductionOnly, setShowProductionOnly] = useState(false)
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
-  const filteredPrompts = mockPrompts.filter(
-    (prompt) =>
-      (prompt.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        prompt.description.toLowerCase().includes(searchQuery.toLowerCase())) &&
-      (selectedProject === "all" || prompt.project === selectedProject) &&
-      (selectedLanguage === "all" || prompt.language === selectedLanguage) &&
-      (!showProductionOnly || prompt.isProduction),
-  )
+  useEffect(() => {
+    const fetchPrompts = async () => {
+      setIsLoading(true)
+      setError(null)
+      try {
+        const response = await fetch("http://localhost:8000/api/v1/prompts/");
+        if (!response.ok) {
+          let errorDetail = `HTTP error! status: ${response.status}`;
+          try {
+            const errorData = await response.json();
+            errorDetail = errorData.detail || errorDetail;
+          } catch (e) { /* Ignore JSON parsing error */ }
+          throw new Error(errorDetail);
+        }
+        const data = await response.json();
+        setPrompts(data as Prompt[]);
+      } catch (err) {
+        console.error("Failed to fetch prompts:", err);
+        setError(err instanceof Error ? err.message : "An unknown error occurred");
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchPrompts();
+  }, []);
 
   const projects = [
     { id: "all", name: "All Projects" },
@@ -94,6 +64,15 @@ export function PromptLibrary({ onPromptSelect }: { onPromptSelect?: (prompt: Pr
     { id: "honkai", name: "Honkai: Starrail" },
     { id: "zenless", name: "Zenless Zone Zero" },
   ]
+
+  const filteredPrompts = prompts.filter(
+    (prompt) =>
+      (prompt.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (prompt.description && prompt.description.toLowerCase().includes(searchQuery.toLowerCase()))) &&
+      (selectedProject === "all" || prompt.project === selectedProject) &&
+      (selectedLanguage === "all" || prompt.language === selectedLanguage) &&
+      (!showProductionOnly || prompt.isProduction === true)
+  );
 
   return (
     <div className="space-y-4">
@@ -144,60 +123,77 @@ export function PromptLibrary({ onPromptSelect }: { onPromptSelect?: (prompt: Pr
           className="max-w-sm"
         />
       </div>
-      <div className="rounded-md border">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Name</TableHead>
-              <TableHead>Description</TableHead>
-              <TableHead>Last Modified</TableHead>
-              <TableHead>Tags</TableHead>
-              <TableHead>Project</TableHead>
-              <TableHead>Language</TableHead>
-              <TableHead>Version</TableHead>
-              <TableHead>Production</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {filteredPrompts.map((prompt) => (
-              <TableRow
-                key={prompt.id}
-                className="cursor-pointer hover:bg-muted/50"
-                onClick={() => onPromptSelect && onPromptSelect(prompt)}
-              >
-                <TableCell className="font-medium">{prompt.name}</TableCell>
-                <TableCell>{prompt.description}</TableCell>
-                <TableCell>{prompt.lastModified}</TableCell>
-                <TableCell>
-                  <div className="flex flex-wrap gap-1">
-                    {prompt.tags.map((tag) => (
-                      <Badge key={tag} variant="outline">
-                        {tag}
-                      </Badge>
-                    ))}
-                  </div>
-                </TableCell>
-                <TableCell>
-                  {prompt.project && (
-                    <Badge variant="secondary">
-                      {projects.find((p) => p.id === prompt.project)?.name || prompt.project}
-                    </Badge>
-                  )}
-                </TableCell>
-                <TableCell>
-                  {prompt.language && (
-                    <Badge variant="outline">
-                      {availableLanguages.find((l) => l.id === prompt.language)?.name || prompt.language}
-                    </Badge>
-                  )}
-                </TableCell>
-                <TableCell>v{prompt.version}</TableCell>
-                <TableCell>{prompt.isProduction && <CheckCircle2 className="h-5 w-5 text-green-500" />}</TableCell>
+
+      {isLoading && <p>Loading prompts...</p>}
+      {error && <p className="text-red-500">Error loading prompts: {error}</p>}
+
+      {!isLoading && !error && (
+        <div className="rounded-md border">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Name</TableHead>
+                <TableHead>Description</TableHead>
+                <TableHead>Tags</TableHead>
+                <TableHead>Project</TableHead>
+                <TableHead>Language</TableHead>
+                <TableHead>Version</TableHead>
+                <TableHead>Production</TableHead>
+                <TableHead>Last Modified</TableHead>
               </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </div>
+            </TableHeader>
+            <TableBody>
+              {filteredPrompts.length > 0 ? (
+                filteredPrompts.map((prompt) => {
+                  console.log("PromptLibrary: Rendering TableRow with key:", prompt.id, "Prompt object:", prompt);
+                  return (
+                    <TableRow
+                      key={prompt.id}
+                      className="cursor-pointer hover:bg-muted/50"
+                      onClick={() => onPromptSelect && onPromptSelect(prompt)}
+                    >
+                      <TableCell className="font-medium">{prompt.name}</TableCell>
+                      <TableCell>{prompt.description}</TableCell>
+                      <TableCell>
+                        <div className="flex flex-wrap gap-1">
+                          {prompt.tags?.map((tag) => (
+                            <Badge key={tag} variant="outline">
+                              {tag}
+                            </Badge>
+                          ))}
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        {prompt.project && (
+                          <Badge variant="secondary">
+                            {projects.find((p) => p.id === prompt.project)?.name || prompt.project}
+                          </Badge>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {prompt.language && (
+                          <Badge variant="outline">
+                            {availableLanguages.find((l) => l.id === prompt.language)?.name || prompt.language}
+                          </Badge>
+                        )}
+                      </TableCell>
+                      <TableCell>{prompt.version ? `v${prompt.version}` : "N/A"}</TableCell>
+                      <TableCell>{prompt.isProduction && <CheckCircle2 className="h-5 w-5 text-green-500" />}</TableCell>
+                      <TableCell>{prompt.updated_at ? new Date(prompt.updated_at).toLocaleString() : "N/A"}</TableCell>
+                    </TableRow>
+                  );
+                })
+              ) : (
+                <TableRow>
+                    <TableCell colSpan={8} className="text-center">
+                        No prompts found.
+                    </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </div>
+      )}
     </div>
   )
 }

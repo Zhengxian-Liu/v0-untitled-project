@@ -5,9 +5,12 @@ from typing import List
 from bson import ObjectId
 from datetime import datetime
 import anthropic # For specific APIError handling
+import asyncio # For checking background task completion
+from pymongo import ReturnDocument
 
 from app.db.client import get_database
-from app.models.prompt import Prompt, PyObjectId
+from app.models.common import PyObjectId # Correct import path
+from app.models.prompt import Prompt # Only need Prompt model
 from app.models.evaluation import (
     Evaluation, EvaluationCreateRequest, EvaluationRequestData,
     EvaluationResult, EvaluationResultCreate, EvaluationResultUpdate,
@@ -22,139 +25,196 @@ PROMPT_COLLECTION = "prompts"
 
 logger = logging.getLogger(__name__)
 
-# --- Background Task --- M
+# --- Background Task (Modified) --- M
 
-async def run_evaluation_task(
+async def run_single_prompt_evaluation_task(
     evaluation_id: PyObjectId,
+    prompt_id: PyObjectId, # Specific prompt to run
     db: AsyncIOMotorDatabase
 ):
-    """Background task to perform the actual evaluation against Claude API."""
-    logger.info(f"Starting background evaluation task for ID: {evaluation_id}")
+    """Background task to evaluate ONE prompt against the test set."""
+    logger.info(f"Starting sub-task for Eval ID: {evaluation_id}, Prompt ID: {prompt_id}")
     eval_collection = db[EVAL_COLLECTION]
     results_collection = db[RESULTS_COLLECTION]
     prompt_collection = db[PROMPT_COLLECTION]
 
-    # 1. Fetch the full evaluation record (including test data)
+    # 1. Fetch the PARENT evaluation record to get test data
     eval_record_dict = await eval_collection.find_one({"_id": evaluation_id})
     if not eval_record_dict:
-        logger.error(f"Background task failed: Evaluation record {evaluation_id} not found.")
+        logger.error(f"Sub-task failed: Eval record {evaluation_id} not found.")
+        # Cannot update status easily here, rely on main task logic or timeout
         return
-    # Use EvaluationInDB to parse the full record
     try:
         eval_record = EvaluationInDB(**eval_record_dict)
     except Exception as e:
-        logger.error(f"Background task failed: Could not parse evaluation record {evaluation_id}. Error: {e}")
-        # Optionally update status to failed
-        await eval_collection.update_one(
-            {"_id": evaluation_id}, {"$set": {"status": "failed", "completed_at": datetime.utcnow()}}
-        )
+        logger.error(f"Sub-task failed: Could not parse eval record {evaluation_id}. Error: {e}")
         return
 
-    # 2. Fetch the prompt text
-    prompt_record = await prompt_collection.find_one({"_id": eval_record.prompt_id})
+    # 2. Fetch THIS prompt's text
+    prompt_record = await prompt_collection.find_one({"_id": prompt_id})
     if not prompt_record:
-        logger.error(f"Background task failed: Prompt {eval_record.prompt_id} not found for evaluation {evaluation_id}.")
-        await eval_collection.update_one(
-            {"_id": evaluation_id}, {"$set": {"status": "failed", "completed_at": datetime.utcnow()}}
-        )
-        return
-    prompt_text = prompt_record.get("text", "") # Assuming prompt model has 'text' field
+        logger.error(f"Sub-task failed: Prompt {prompt_id} not found for eval {evaluation_id}.")
+        # Log error for this prompt, other tasks might continue
+        # Store error results?
+        for item in eval_record.test_set_data:
+             error_result = EvaluationResultCreate(
+                 evaluation_id=evaluation_id,
+                 prompt_id=prompt_id,
+                 source_text=item.source_text,
+                 model_output=f"ERROR: Prompt {prompt_id} not found.",
+                 reference_text=item.reference_text
+             )
+             await results_collection.insert_one(error_result.model_dump(exclude={"score", "comment"}))
+        return # Stop this specific task
+    # --- FIX: Add inline section assembly --- M
+    # Use Prompt model validation to easily access fields
+    prompt_model = Prompt.model_validate(prompt_record)
+    # Simple assembly:
+    prompt_sections = prompt_model.sections if prompt_model.sections else []
+    prompt_text = "\n\n".join([f"### {sec.name}\n{sec.content}" for sec in prompt_sections])
+    # --- End FIX ---
 
-    # 3. Update status to running
-    await eval_collection.update_one(
-        {"_id": evaluation_id}, {"$set": {"status": "running"}}
-    )
-
-    # 4. Iterate and call Claude API
-    has_errors = False
+    # 3. Iterate test set and call Claude API
+    task_has_errors = False
     for item in eval_record.test_set_data:
         model_output = None
         try:
-            # Note: This call is synchronous within the async task.
-            # For many items, consider asyncio.gather with async client or thread pool executor.
             model_output = await generate_text_with_claude(prompt_text, item.source_text)
-            logger.debug(f"Generated output for source: '{item.source_text[:30]}...' in eval {evaluation_id}")
+            logger.debug(f"Eval {evaluation_id}, Prompt {prompt_id}: Generated output for source: '{item.source_text[:30]}...'")
+        except Exception as e: # Catch any exception from service
+            logger.error(f"Eval {evaluation_id}, Prompt {prompt_id}: Claude API error for source '{item.source_text[:30]}...': {e}")
+            task_has_errors = True
+            model_output = f"ERROR: {e}"
 
-        except ValueError as e:
-            # Handle client initialization error from service
-            logger.error(f"Claude client error during eval {evaluation_id}: {e}")
-            has_errors = True
-            # Optionally break or continue processing other items
-            break # Stop processing if client isn't working
-        except anthropic.APIError as e:
-            logger.error(f"Claude API error for source '{item.source_text[:30]}...' in eval {evaluation_id}: {e}")
-            has_errors = True
-            model_output = f"ERROR: {e}" # Store error message as output
-        except Exception as e:
-            logger.error(f"Unexpected error for source '{item.source_text[:30]}...' in eval {evaluation_id}: {e}")
-            has_errors = True
-            model_output = f"UNEXPECTED ERROR: {e}"
-
-        # 5. Store the result
+        # 4. Store the result with prompt_id
         result_data = EvaluationResultCreate(
             evaluation_id=evaluation_id,
+            prompt_id=prompt_id, # Store which prompt generated this
             source_text=item.source_text,
             model_output=model_output,
             reference_text=item.reference_text
         )
-        await results_collection.insert_one(result_data.model_dump(exclude={"score", "comment"})) # Don't insert null score/comment initially
+        await results_collection.insert_one(result_data.model_dump(exclude={"score", "comment"}))
 
-    # 6. Update final status
-    final_status = "failed" if has_errors else "completed"
+    # --- Status Update (Handled by coordinating task/endpoint) ---
+    # This task only logs completion/errors. The main evaluation status is updated elsewhere.
+    status_msg = "errors" if task_has_errors else "success"
+    logger.info(f"Finished sub-task for Eval ID: {evaluation_id}, Prompt ID: {prompt_id} with status: {status_msg}")
+    # We need a way to signal completion back to the parent eval record or a monitoring task.
+    # Simplest for now: update a field in the parent eval record.
+    # This might lead to race conditions if not handled carefully.
     await eval_collection.update_one(
         {"_id": evaluation_id},
-        {"set": {"status": final_status, "completed_at": datetime.utcnow()}}
+        {"$inc": {"completed_prompt_tasks": 1}} # Increment a counter
     )
-    logger.info(f"Background evaluation task for ID: {evaluation_id} finished with status: {final_status}")
 
-# --- API Endpoints --- M
+# --- API Endpoints (Modified) --- M
 
 @router.post(
     "/",
     response_model=Evaluation,
-    status_code=status.HTTP_202_ACCEPTED, # Accepted for background processing
-    summary="Start a new evaluation session",
-    description="Accepts evaluation details and schedules it for background processing.",
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="Start a new multi-prompt evaluation session",
+    description="Accepts evaluation details for multiple prompts and schedules background processing.",
 )
 async def create_evaluation(
-    eval_request: EvaluationCreateRequest,
+    eval_request: EvaluationCreateRequest, # Now expects prompt_ids list
     background_tasks: BackgroundTasks,
     db: AsyncIOMotorDatabase = Depends(get_database),
 ):
-    """Initiate an evaluation run. Calls Claude API in the background."""
-    # 1. Check if prompt exists
-    prompt = await db[PROMPT_COLLECTION].find_one({"_id": eval_request.prompt_id})
-    if not prompt:
+    """Initiate an evaluation run for multiple prompts."""
+    # 1. Validate all prompt IDs exist
+    prompt_ids = eval_request.prompt_ids
+    found_prompts_count = await db[PROMPT_COLLECTION].count_documents({"_id": {"$in": prompt_ids}})
+    if found_prompts_count != len(prompt_ids):
+        # Find which prompts are missing (more complex query) or just raise generic error
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Prompt with ID {eval_request.prompt_id} not found",
+            detail="One or more specified prompt IDs were not found.",
         )
 
     # 2. Create the main Evaluation record
     eval_data_dict = {
-        "prompt_id": eval_request.prompt_id,
+        "prompt_ids": prompt_ids, # Store list of IDs
         "test_set_name": eval_request.test_set_name,
         "status": "pending",
         "created_at": datetime.utcnow(),
-        "test_set_data": [item.model_dump() for item in eval_request.test_set_data]
+        "test_set_data": [item.model_dump() for item in eval_request.test_set_data],
+        "total_prompt_tasks": len(prompt_ids), # Store how many tasks to expect
+        "completed_prompt_tasks": 0, # Initialize completion counter
     }
     insert_result = await db[EVAL_COLLECTION].insert_one(eval_data_dict)
     created_eval_id = insert_result.inserted_id
 
-    # 3. Schedule the background task
-    background_tasks.add_task(run_evaluation_task, created_eval_id, db)
-    logger.info(f"Scheduled background evaluation task for ID: {created_eval_id}")
+    # 3. Schedule background task for EACH prompt
+    for prompt_id in prompt_ids:
+        background_tasks.add_task(run_single_prompt_evaluation_task, created_eval_id, prompt_id, db)
+    logger.info(f"Scheduled {len(prompt_ids)} background sub-tasks for Evaluation ID: {created_eval_id}")
 
-    # 4. Return the created Evaluation record (without test_set_data)
-    # Fetch the newly created record to return it structured by the model
+    # --- Set status to running (after scheduling) --- M
+    await db[EVAL_COLLECTION].update_one(
+        {"_id": created_eval_id, "status": "pending"}, # Ensure we only update if still pending
+        {"$set": {"status": "running"}}
+    )
+    # --- End Status Update ---
+
+    # 4. Return the created Evaluation record
+    # Fetch again to get potentially updated status
     created_eval_record = await db[EVAL_COLLECTION].find_one({"_id": created_eval_id})
     if created_eval_record:
-        # Use the Evaluation model (which excludes test_set_data by default)
-        return Evaluation(**created_eval_record)
+        return Evaluation(**created_eval_record) # Use base Evaluation model
     else:
-        # Should not happen
         raise HTTPException(status_code=500, detail="Failed to retrieve evaluation record after creation.")
 
+# --- Endpoint to Check Status (Potentially Needed) --- M
+@router.patch(
+    "/{evaluation_id}/check_completion",
+    response_model=Evaluation,
+    summary="Check and potentially update evaluation status to completed",
+    description="Checks if all sub-tasks are finished and updates the main status."
+)
+async def check_evaluation_completion(
+    evaluation_id: PyObjectId,
+    db: AsyncIOMotorDatabase = Depends(get_database)
+):
+    """Checks if completed_tasks matches total_tasks and updates status."""
+    eval_record = await db[EVAL_COLLECTION].find_one({"_id": evaluation_id})
+    if not eval_record:
+        raise HTTPException(status_code=404, detail=f"Evaluation {evaluation_id} not found")
+
+    if eval_record.get("status") in ["pending", "running"]:
+        total = eval_record.get("total_prompt_tasks", 0)
+        completed = eval_record.get("completed_prompt_tasks", 0)
+        if completed >= total > 0:
+            logger.info(f"Marking evaluation {evaluation_id} as completed.")
+            update_filter = {"_id": evaluation_id, "status": {"$in": ["pending", "running"]}}
+            update_payload = {"$set": {"status": "completed", "completed_at": datetime.utcnow()}}
+            try:
+                updated_eval_record = await db[EVAL_COLLECTION].find_one_and_update(
+                     update_filter,
+                     update_payload,
+                     return_document=ReturnDocument.AFTER
+                )
+                if updated_eval_record:
+                     logger.info(f"Successfully marked evaluation {evaluation_id} as completed.")
+                     eval_record = updated_eval_record
+                else:
+                     logger.info(f"Evaluation {evaluation_id} status was likely already completed/failed before update attempt.")
+                     eval_record = await db[EVAL_COLLECTION].find_one({"_id": evaluation_id})
+
+            except ValueError as e:
+                 logger.error(f"!!! CAUGHT ValueError during find_one_and_update for eval completion ({evaluation_id}) !!!")
+                 logger.exception("ValueError details:")
+                 raise HTTPException(status_code=500, detail="Internal error updating evaluation status (ValueError).")
+            except Exception as e:
+                 logger.error(f"!!! CAUGHT unexpected Exception during find_one_and_update for eval completion ({evaluation_id}) !!!")
+                 logger.exception("Unexpected Exception details:")
+                 raise HTTPException(status_code=500, detail="Internal error updating evaluation status (Exception).")
+
+    if not eval_record:
+         raise HTTPException(status_code=404, detail=f"Evaluation {evaluation_id} not found after update check")
+
+    return Evaluation(**eval_record)
 
 @router.get(
     "/",
@@ -204,8 +264,8 @@ async def get_evaluation_results(
 ):
     """Retrieve all results for a given evaluation ID."""
     results_cursor = db[RESULTS_COLLECTION].find({"evaluation_id": evaluation_id})
-    results = await results_cursor.to_list(length=None) # Get all results for this eval
-    return [EvaluationResult(**res) for res in results]
+    results = await results_cursor.to_list(length=None)
+    return [EvaluationResult.model_validate(res) for res in results]
 
 
 @router.put(

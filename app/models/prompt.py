@@ -5,9 +5,9 @@ from bson import ObjectId
 
 # --- MODIFIED: Import PyObjectId from common --- M
 from .common import PyObjectId
-from .prompt_history import PromptSection # Import section from history or define here?
-# Let's define PromptSection here as it's core to Prompt
-# --- End MODIFICATION ---
+# --- REMOVE Incorrect Import --- M
+# from .prompt_history import PromptSection
+# --- End REMOVE ---
 
 # Define PromptSection structure here
 class PromptSection(BaseModel):
@@ -46,39 +46,52 @@ class PyObjectId(ObjectId):
 # --- Prompt Models ---
 
 class PromptBase(BaseModel):
-    """Shared base attributes for a Prompt."""
+    """Shared base attributes for a Prompt version."""
     name: str = Field(..., min_length=1, max_length=100, description="The name of the prompt.")
     description: Optional[str] = Field(None, max_length=500, description="An optional description for the prompt.")
-    # --- Store sections, make text optional (could be derived/cached) --- M
     sections: List[PromptSection] = Field(default_factory=list, description="The structured sections of the prompt.")
-    text: Optional[str] = Field(None, description="Optional: Assembled text content of the prompt.") # Make text optional
-    # --- End section change ---
+    text: Optional[str] = Field(None, description="Optional: Assembled text content of the prompt.")
     tags: List[str] = Field(default_factory=list, description="Tags associated with the prompt.")
     project: Optional[str] = Field(None, description="Associated project identifier (e.g., 'genshin').")
     language: Optional[str] = Field(None, description="Associated language identifier (e.g., 'en').")
-    isProduction: bool = Field(default=False, description="Indicates if this is the production prompt for its project/language.")
-    version: str = Field(default="1.0", description="Version string for the prompt.")
+    isProduction: bool = Field(default=False, description="Indicates if this version is the production one for its project/language.")
+    version: str = Field(default="1.0", description="Version string for this specific prompt version.")
+    # --- Versioning Fields --- M
+    base_prompt_id: Optional[PyObjectId] = Field(None, description="Identifier linking versions of the same conceptual prompt.")
+    is_latest: bool = Field(default=True, description="Indicates if this is the latest saved version of the prompt.")
+    # --- End Versioning Fields ---
 
 class PromptCreate(PromptBase):
-    """Properties to receive via API on creation."""
-    # Remove text? Or expect client to send assembled text AND sections?
-    # Let's expect sections primarily, text can be generated/ignored on create.
-    text: Optional[str] = None
+    """Properties to receive via API on creation of the *first* version."""
+    # On first creation, base_prompt_id and is_latest will be set by the backend logic.
+    # Exclude them from the direct create payload schema.
+    model_config = ConfigDict(
+        # Pydantic v2 way to exclude fields from schema generation
+        fields={
+            'base_prompt_id': {'exclude': True},
+            'is_latest': {'exclude': True}
+        }
+    )
+    # version will also be defaulted to 1.0 by backend
 
 class PromptUpdate(BaseModel):
-    """Properties to receive via API on update, all optional."""
+    """Properties to receive via API when saving a *new* version based on an existing one."""
+    # User provides the state they want for the NEW version.
+    # Backend will handle base_prompt_id, version increment, is_latest flags.
     name: Optional[str] = Field(None, min_length=1, max_length=100)
     description: Optional[str] = None
-    sections: Optional[List[PromptSection]] = None # Allow updating sections
-    text: Optional[str] = None # Allow updating assembled text if desired
+    sections: Optional[List[PromptSection]] = None
+    text: Optional[str] = None
     tags: Optional[List[str]] = None
     project: Optional[str] = None
     language: Optional[str] = None
     isProduction: Optional[bool] = None
-    version: Optional[str] = None
+    # Version is handled automatically by backend, don't allow update here
+    # version: Optional[str] = None
 
 class PromptInDBBase(PromptBase):
-    """Base model for Prompt stored in MongoDB, includes DB-specific fields."""
+    """Base model for Prompt version stored in MongoDB."""
+    # Represents a specific version document
     id: PyObjectId = Field(
         default_factory=PyObjectId,
         validation_alias="_id"
@@ -95,5 +108,5 @@ class PromptInDBBase(PromptBase):
     )
 
 class Prompt(PromptInDBBase):
-    """Properties to return to client via API."""
+    """Properties to return to client via API for a specific prompt version."""
     pass 

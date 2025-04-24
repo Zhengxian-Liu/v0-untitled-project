@@ -17,6 +17,7 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
   const [activeTab, setActiveTab] = useState("library")
   const [selectedPrompt, setSelectedPrompt] = useState<Prompt | null>(null)
   const [refreshKey, setRefreshKey] = useState(0)
+  const [currentLanguage, setCurrentLanguage] = useState<string>("ja")
 
   const handlePromptSelect = (prompt: Prompt) => {
     setSelectedPrompt(prompt)
@@ -35,7 +36,10 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="flex min-h-screen flex-col">
-      <MainNav />
+      <MainNav
+        currentLanguage={currentLanguage}
+        setCurrentLanguage={setCurrentLanguage}
+      />
       <div className="flex flex-1">
         <Sidebar />
         <main className="flex-1 p-6">
@@ -53,13 +57,21 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
                 </Button>
               </div>
               <TabsContent value="library" className="mt-6">
-                <PromptLibrary key={refreshKey} onPromptSelect={handlePromptSelect} />
+                <PromptLibrary
+                  key={refreshKey}
+                  onPromptSelect={handlePromptSelect}
+                  currentLanguage={currentLanguage}
+                />
               </TabsContent>
               <TabsContent value="editor" className="mt-6">
-                <PromptEditor prompt={selectedPrompt} onSaveSuccess={triggerLibraryRefresh} />
+                <PromptEditor
+                  prompt={selectedPrompt}
+                  onSaveSuccess={triggerLibraryRefresh}
+                  currentLanguage={currentLanguage}
+                />
               </TabsContent>
               <TabsContent value="evaluate" className="mt-6">
-                <EvaluationPanel />
+                <EvaluationPanel currentLanguage={currentLanguage} />
               </TabsContent>
             </Tabs>
           </div>

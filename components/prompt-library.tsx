@@ -22,11 +22,15 @@ const availableLanguages = [
   { id: "pt", name: "Portuguese" },
 ]
 
-export function PromptLibrary({ onPromptSelect }: { onPromptSelect?: (prompt: Prompt) => void }) {
+interface PromptLibraryProps {
+  onPromptSelect?: (prompt: Prompt) => void;
+  currentLanguage: string;
+}
+
+export function PromptLibrary({ onPromptSelect, currentLanguage }: PromptLibraryProps) {
   const [prompts, setPrompts] = useState<Prompt[]>([])
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedProject, setSelectedProject] = useState("all")
-  const [selectedLanguage, setSelectedLanguage] = useState("all")
   const [showProductionOnly, setShowProductionOnly] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -67,10 +71,10 @@ export function PromptLibrary({ onPromptSelect }: { onPromptSelect?: (prompt: Pr
 
   const filteredPrompts = prompts.filter(
     (prompt) =>
+      prompt.language === currentLanguage &&
       (prompt.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
         (prompt.description && prompt.description.toLowerCase().includes(searchQuery.toLowerCase()))) &&
       (selectedProject === "all" || prompt.project === selectedProject) &&
-      (selectedLanguage === "all" || prompt.language === selectedLanguage) &&
       (!showProductionOnly || prompt.isProduction === true)
   );
 
@@ -85,19 +89,6 @@ export function PromptLibrary({ onPromptSelect }: { onPromptSelect?: (prompt: Pr
             {projects.map((project) => (
               <SelectItem key={project.id} value={project.id}>
                 {project.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-
-        <Select value={selectedLanguage} onValueChange={setSelectedLanguage}>
-          <SelectTrigger className="w-[200px]">
-            <SelectValue placeholder="Select language" />
-          </SelectTrigger>
-          <SelectContent>
-            {availableLanguages.map((language) => (
-              <SelectItem key={language.id} value={language.id}>
-                {language.name}
               </SelectItem>
             ))}
           </SelectContent>
@@ -136,7 +127,6 @@ export function PromptLibrary({ onPromptSelect }: { onPromptSelect?: (prompt: Pr
                 <TableHead>Description</TableHead>
                 <TableHead>Tags</TableHead>
                 <TableHead>Project</TableHead>
-                <TableHead>Language</TableHead>
                 <TableHead>Version</TableHead>
                 <TableHead>Production</TableHead>
                 <TableHead>Last Modified</TableHead>
@@ -167,13 +157,6 @@ export function PromptLibrary({ onPromptSelect }: { onPromptSelect?: (prompt: Pr
                         {prompt.project && (
                           <Badge variant="secondary">
                             {projects.find((p) => p.id === prompt.project)?.name || prompt.project}
-                          </Badge>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        {prompt.language && (
-                          <Badge variant="outline">
-                            {availableLanguages.find((l) => l.id === prompt.language)?.name || prompt.language}
                           </Badge>
                         )}
                       </TableCell>

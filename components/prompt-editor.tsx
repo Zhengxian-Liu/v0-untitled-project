@@ -173,21 +173,21 @@ const mockProductionPrompts: ProductionPrompt[] = [
   },
 ]
 
-// --- Define Props Type --- M
+// --- Update Props Type --- M
 interface PromptEditorProps {
   prompt: Prompt | null;
-  onSaveSuccess?: () => void; // Make callback optional
+  onSaveSuccess?: () => void;
+  currentLanguage: string; // Add currentLanguage prop
 }
 
 // --- Constant for Select placeholder value --- M
 const SELECT_PLACEHOLDER_VALUE = "--none--";
 
-// Use the Props type
-export function PromptEditor({ prompt, onSaveSuccess }: PromptEditorProps) {
+// Use the updated Props type
+export function PromptEditor({ prompt, onSaveSuccess, currentLanguage }: PromptEditorProps) {
   const [name, setName] = useState("")
   const [description, setDescription] = useState("")
   const [selectedProject, setSelectedProject] = useState<string | undefined>(undefined)
-  const [selectedLanguage, setSelectedLanguage] = useState<string | undefined>(undefined)
   const [isProduction, setIsProduction] = useState(false)
   const [selectedTags, setSelectedTags] = useState<string[]>([])
   const [version, setVersion] = useState("1.0")
@@ -202,11 +202,11 @@ export function PromptEditor({ prompt, onSaveSuccess }: PromptEditorProps) {
   const [showInsertSectionDialog, setShowInsertSectionDialog] = useState(false)
   const [showPreview, setShowPreview] = useState(false)
 
-  // --- Re-introduce state for production check --- M
+  // --- Restore state for production check --- M
   const [currentProductionPrompt, setCurrentProductionPrompt] = useState<Prompt | null>(null)
   const [isLoadingProductionCheck, setIsLoadingProductionCheck] = useState(false)
   const [showProductionConfirmDialog, setShowProductionConfirmDialog] = useState(false)
-  // --- End re-introduction ---
+  // --- End Restore ---
 
   // --- State for History --- M
   const [showHistoryDialog, setShowHistoryDialog] = useState(false);
@@ -222,7 +222,6 @@ export function PromptEditor({ prompt, onSaveSuccess }: PromptEditorProps) {
       setSections(prompt.sections && prompt.sections.length > 0 ? prompt.sections : [])
       setSelectedTags(prompt.tags || [])
       setSelectedProject(prompt.project)
-      setSelectedLanguage(prompt.language)
       setIsProduction(prompt.isProduction || false)
       setVersion(prompt.version || "1.0")
     } else {
@@ -232,7 +231,6 @@ export function PromptEditor({ prompt, onSaveSuccess }: PromptEditorProps) {
       setIsProduction(false)
       setSelectedTags([])
       setSelectedProject(undefined)
-      setSelectedLanguage(undefined)
       setVersion("1.0")
       setSections([
         { id: "1", type: "role", name: "Role Definition", content: "" },
@@ -242,44 +240,38 @@ export function PromptEditor({ prompt, onSaveSuccess }: PromptEditorProps) {
     }
   }, [prompt])
 
-  // --- NEW: Effect to check for existing production prompt --- M
+  // --- Restore Effect to check for existing production prompt (using fixed language 'en') --- M
   useEffect(() => {
     const fetchCurrentProductionPrompt = async () => {
-      if (selectedProject && selectedLanguage) {
+      if (selectedProject && currentLanguage) {
         setIsLoadingProductionCheck(true);
         setCurrentProductionPrompt(null); // Reset before fetching
         try {
-          const url = `http://localhost:8000/api/v1/prompts/production/?project=${encodeURIComponent(selectedProject)}&language=${encodeURIComponent(selectedLanguage)}`;
+          const url = `http://localhost:8000/api/v1/prompts/production/?project=${encodeURIComponent(selectedProject)}&language=${encodeURIComponent(currentLanguage)}`;
           const response = await fetch(url);
 
           if (response.ok) {
             const data: Prompt = await response.json();
             setCurrentProductionPrompt(data);
-            console.log("Found current production prompt:", data);
           } else if (response.status === 404) {
-            // 404 is expected if no production prompt exists
             setCurrentProductionPrompt(null);
-            console.log("No existing production prompt found for:", selectedProject, selectedLanguage);
           } else {
-            // Handle other errors
             console.error("Error fetching production prompt status:", response.statusText);
-             setCurrentProductionPrompt(null); // Assume none on error
+            setCurrentProductionPrompt(null);
           }
         } catch (error) {
           console.error("Failed to fetch production prompt status:", error);
-           setCurrentProductionPrompt(null); // Assume none on error
+          setCurrentProductionPrompt(null);
         } finally {
           setIsLoadingProductionCheck(false);
         }
       } else {
-        // If project or language is not selected, there's no specific production prompt to check
         setCurrentProductionPrompt(null);
       }
     };
-
     fetchCurrentProductionPrompt();
-  }, [selectedProject, selectedLanguage]);
-  // --- End NEW Effect ---
+  }, [selectedProject, currentLanguage]);
+  // --- End Restore Effect ---
 
   const handleTagToggle = (tag: string) => {
     if (selectedTags.includes(tag)) {
@@ -412,33 +404,27 @@ export function PromptEditor({ prompt, onSaveSuccess }: PromptEditorProps) {
       .join("\n\n")
   }
 
-  // --- MODIFIED: Restore production check logic --- M
+  // --- Restore handleProductionChange with Dialog logic --- M
   const handleProductionChange = (checked: boolean) => {
-    // Check if we are trying to set THIS prompt to production
     if (checked) {
-       // Check if there IS a current production prompt AND it's DIFFERENT from the one being edited
+       // Check if a *different* production prompt exists for this project (and fixed language)
        if (currentProductionPrompt && currentProductionPrompt.id !== prompt?.id) {
-           // If yes, show the confirmation dialog
-           setShowProductionConfirmDialog(true);
+           setShowProductionConfirmDialog(true); // Show dialog
        } else {
-           // Otherwise (no existing or editing the existing one), just set the state directly
-           setIsProduction(true);
+           setIsProduction(true); // Set state directly
        }
     } else {
-        // If unchecking, always allow setting state directly
-        setIsProduction(false);
+        setIsProduction(false); // Always allow unchecking
     }
   };
 
-  // Re-introduce the confirmation handler
+  // Restore the confirmation handler
   const confirmProductionChange = () => {
-    setIsProduction(true); // Set the state
-    setShowProductionConfirmDialog(false); // Close the dialog
-    // The actual backend update happens in handleSave
+    setIsProduction(true);
+    setShowProductionConfirmDialog(false);
   };
-  // --- End MODIFICATION ---
+  // --- End Restore ---
 
-  // --- NEW: Handler for saving the prompt ---
   const handleSave = async () => {
     console.log("Save button clicked!");
 
@@ -457,7 +443,7 @@ export function PromptEditor({ prompt, onSaveSuccess }: PromptEditorProps) {
       sections: sections,
       tags: selectedTags,
       project: selectedProject || null,
-      language: selectedLanguage || null,
+      language: currentLanguage,
       isProduction: isProduction,
       version: version,
     };
@@ -560,7 +546,6 @@ export function PromptEditor({ prompt, onSaveSuccess }: PromptEditorProps) {
       setSections(restoredPrompt.sections || []);
       setSelectedTags(restoredPrompt.tags || []);
       setSelectedProject(restoredPrompt.project);
-      setSelectedLanguage(restoredPrompt.language);
       setIsProduction(restoredPrompt.isProduction || false);
       setVersion(restoredPrompt.version || "1.0");
       // --- End State Update ---
@@ -637,28 +622,6 @@ export function PromptEditor({ prompt, onSaveSuccess }: PromptEditorProps) {
                   <SelectItem key={project.id} value={project.id}>
                     {project.name}
                   </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="grid gap-2">
-            <Label htmlFor="language">Language</Label>
-            <Select
-              value={selectedLanguage ?? SELECT_PLACEHOLDER_VALUE}
-              onValueChange={(value) => setSelectedLanguage(value === SELECT_PLACEHOLDER_VALUE ? undefined : value)}
-            >
-              <SelectTrigger id="language">
-                <SelectValue placeholder="Select language" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={SELECT_PLACEHOLDER_VALUE}>-- None --</SelectItem>
-                {availableLanguages.map((language) => (
-                  language.id !== 'all' && (
-                    <SelectItem key={language.id} value={language.id}>
-                      {language.name}
-                    </SelectItem>
-                  )
                 ))}
               </SelectContent>
             </Select>
@@ -924,13 +887,13 @@ export function PromptEditor({ prompt, onSaveSuccess }: PromptEditorProps) {
         </DialogContent>
       </Dialog>
 
+      {/* --- Restore Production Confirm Dialog --- M */}
       <Dialog open={showProductionConfirmDialog} onOpenChange={setShowProductionConfirmDialog}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Change Production Prompt?</DialogTitle>
             <DialogDescription>
-              There is already a production prompt for the selected project and language:
-              <span className="font-semibold block mt-2">{currentProductionPrompt?.name}</span>
+              There is already a production prompt ({currentProductionPrompt?.name}) for the selected project and language ({currentLanguage}).
             </DialogDescription>
           </DialogHeader>
           <div className="py-4">
@@ -949,6 +912,7 @@ export function PromptEditor({ prompt, onSaveSuccess }: PromptEditorProps) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      {/* --- End Restore --- */}
 
       {/* --- History Dialog --- M */}
       <Dialog open={showHistoryDialog} onOpenChange={setShowHistoryDialog}>

@@ -128,7 +128,12 @@ const initialMockResults: ResultItem[] = [
   },
 ]
 
-export function EvaluationPanel() {
+// --- Define Props --- M
+interface EvaluationPanelProps {
+  currentLanguage: string;
+}
+
+export function EvaluationPanel({ currentLanguage }: EvaluationPanelProps) {
   const [selectedProject, setSelectedProject] = useState("genshin")
   const [showIdealOutputs, setShowIdealOutputs] = useState(false)
   const [testSetType, setTestSetType] = useState("standardized")

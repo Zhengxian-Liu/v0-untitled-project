@@ -10,6 +10,8 @@ from app.models.evaluation_session import (
     EvaluationSession, EvaluationSessionCreate, EvaluationSessionInDB,
     EvaluationSessionSummary # Import the Summary model
 )
+from app.routes.auth import get_current_active_user
+from app.models.user import User as UserModel
 
 router = APIRouter()
 SESSION_COLLECTION = "evaluation_sessions"
@@ -26,6 +28,7 @@ logger = logging.getLogger(__name__)
 async def save_evaluation_session(
     session_data_in: EvaluationSessionCreate,
     db: AsyncIOMotorDatabase = Depends(get_database),
+    current_user: UserModel = Depends(get_current_active_user)
 ):
     """Save a completed evaluation session with its results and config."""
 
@@ -35,7 +38,7 @@ async def save_evaluation_session(
         "session_name": session_data_in.session_name or "Saved Evaluation Session",
         "session_description": session_data_in.session_description,
         "saved_at": datetime.utcnow(),
-        # Add user ID later if implementing authentication
+        "user_id": current_user.id
     }
 
     # Optionally link back to the original evaluation run ID if provided
@@ -69,11 +72,12 @@ async def save_evaluation_session(
 async def list_saved_sessions(
     db: AsyncIOMotorDatabase = Depends(get_database),
     skip: int = 0,
-    limit: int = 100 # Add pagination
+    limit: int = 100,
+    current_user: UserModel = Depends(get_current_active_user)
 ):
     """Fetch saved evaluation sessions with pagination, returning summary data."""
     sessions_cursor = db[SESSION_COLLECTION].find(
-        {},
+        {"user_id": current_user.id},
         # Projection to fetch only fields needed for Summary model + _id
         {
             "session_name": 1,
@@ -108,9 +112,25 @@ async def list_saved_sessions(
 async def get_saved_session(
     session_id: PyObjectId,
     db: AsyncIOMotorDatabase = Depends(get_database),
+    current_user: UserModel = Depends(get_current_active_user)
 ):
     """Fetch a single saved evaluation session by its ID."""
     session_doc = await db[SESSION_COLLECTION].find_one({"_id": session_id})
+
+    if not session_doc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Saved evaluation session with ID {session_id} not found",
+        )
+
+    # --- ADDED Authorization Check --- M
+    if session_doc.get("user_id") != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="User not authorized to access this saved session",
+        )
+    # --- End Authorization Check ---
+
     if session_doc:
         # Validate using the full model
         return EvaluationSession.model_validate(session_doc)
@@ -121,5 +141,52 @@ async def get_saved_session(
         )
 # --- End NEW Endpoint ---
 
-# TODO: Add DELETE endpoint later
-# DELETE /{session_id} 
+# --- NEW: Delete Endpoint --- M
+@router.delete(
+    "/{session_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Delete a saved evaluation session",
+    description="Permanently deletes a saved evaluation session by its ID.",
+    responses={
+        404: {"description": "Saved session not found"},
+        403: {"description": "User not authorized to delete this session"}
+    }
+)
+async def delete_saved_session(
+    session_id: PyObjectId,
+    db: AsyncIOMotorDatabase = Depends(get_database),
+    current_user: UserModel = Depends(get_current_active_user)
+):
+    """Delete a specific saved evaluation session after authorization check."""
+    # 1. Find the session to check ownership
+    session_to_delete = await db[SESSION_COLLECTION].find_one(
+        {"_id": session_id},
+        {"user_id": 1} # Only fetch user_id for check
+    )
+
+    if not session_to_delete:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Saved evaluation session with ID {session_id} not found",
+        )
+
+    # 2. Check authorization
+    if session_to_delete.get("user_id") != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="User not authorized to delete this saved session",
+        )
+
+    # 3. Perform deletion
+    delete_result = await db[SESSION_COLLECTION].delete_one({"_id": session_id})
+
+    if delete_result.deleted_count == 0:
+        # Should not happen normally due to the find_one check above, but handle defensively
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Saved evaluation session with ID {session_id} found but could not be deleted",
+        )
+
+    # Return No Content on success
+    return
+# --- End Delete Endpoint ---

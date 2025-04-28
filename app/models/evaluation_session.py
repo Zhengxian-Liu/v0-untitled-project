@@ -59,13 +59,12 @@ class EvaluationSessionBase(BaseModel):
     # Maybe add a user-provided name/description for the saved session?
     session_name: str = Field(default="Saved Evaluation Session", max_length=150)
     session_description: Optional[str] = Field(None, max_length=500)
+    saved_at: datetime = Field(default_factory=datetime.utcnow)
+    user_id: PyObjectId # ADDED: Reference to the user who saved it
 
 class EvaluationSessionInDB(EvaluationSessionBase):
     """Model representing a saved evaluation session in MongoDB."""
     id: PyObjectId = Field(default_factory=PyObjectId, validation_alias="_id")
-    saved_at: datetime = Field(default_factory=datetime.utcnow)
-    # Optional: Link back to user who saved it later
-    # user_id: Optional[str] = None
 
     model_config = ConfigDict(
         populate_by_name=True,

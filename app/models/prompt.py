@@ -59,6 +59,9 @@ class PromptBase(BaseModel):
     base_prompt_id: Optional[PyObjectId] = Field(None, description="Identifier linking versions of the same conceptual prompt.")
     is_latest: bool = Field(default=True, description="Indicates if this is the latest saved version of the prompt.")
     # --- End Versioning Fields ---
+    is_deleted: bool = False
+    deleted_at: Optional[datetime] = None
+    language: Optional[str] = Field(None, max_length=10, description="Associated language identifier (e.g., 'en').")
 
 class PromptCreate(PromptBase):
     """Properties to receive via API on creation of the *first* version."""

@@ -17,6 +17,8 @@ from app.models.evaluation import (
     EvaluationInDB # Need this for the full data including test_set_data
 )
 from app.services.claude_service import generate_text_with_claude
+from app.routes.auth import get_current_active_user
+from app.models.user import User as UserModel
 
 router = APIRouter()
 EVAL_COLLECTION = "evaluations"
@@ -121,17 +123,40 @@ async def create_evaluation(
     eval_request: EvaluationCreateRequest, # Now expects prompt_ids list
     background_tasks: BackgroundTasks,
     db: AsyncIOMotorDatabase = Depends(get_database),
+    current_user: UserModel = Depends(get_current_active_user)
 ):
     """Initiate an evaluation run for multiple prompts."""
-    # 1. Validate all prompt IDs exist
+    # 1. Validate all prompt IDs exist AND belong to the current user's language
     prompt_ids = eval_request.prompt_ids
-    found_prompts_count = await db[PROMPT_COLLECTION].count_documents({"_id": {"$in": prompt_ids}})
-    if found_prompts_count != len(prompt_ids):
-        # Find which prompts are missing (more complex query) or just raise generic error
+    found_prompts_cursor = db[PROMPT_COLLECTION].find(
+        {"_id": {"$in": prompt_ids}},
+        {"language": 1} # Only fetch language for checking
+    )
+    found_prompts = await found_prompts_cursor.to_list(length=len(prompt_ids))
+
+    if len(found_prompts) != len(prompt_ids):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="One or more specified prompt IDs were not found.",
         )
+
+    # Check language consistency
+    first_prompt_language = None
+    for prompt in found_prompts:
+        lang = prompt.get("language")
+        if lang != current_user.language:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Prompt ID {prompt.get('_id')} does not belong to the user's language."
+            )
+        if first_prompt_language is None:
+            first_prompt_language = lang
+        elif lang != first_prompt_language:
+            # This ensures all prompts in the eval belong to the *same* language (the user's)
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="All prompts in an evaluation must belong to the same language."
+            )
 
     # 2. Create the main Evaluation record
     eval_data_dict = {
@@ -142,6 +167,7 @@ async def create_evaluation(
         "test_set_data": [item.model_dump() for item in eval_request.test_set_data],
         "total_prompt_tasks": len(prompt_ids), # Store how many tasks to expect
         "completed_prompt_tasks": 0, # Initialize completion counter
+        "user_id": current_user.id # ADDED: Link evaluation to user
     }
     insert_result = await db[EVAL_COLLECTION].insert_one(eval_data_dict)
     created_eval_id = insert_result.inserted_id
@@ -175,12 +201,21 @@ async def create_evaluation(
 )
 async def check_evaluation_completion(
     evaluation_id: PyObjectId,
-    db: AsyncIOMotorDatabase = Depends(get_database)
+    db: AsyncIOMotorDatabase = Depends(get_database),
+    current_user: UserModel = Depends(get_current_active_user)
 ):
     """Checks if completed_tasks matches total_tasks and updates status."""
     eval_record = await db[EVAL_COLLECTION].find_one({"_id": evaluation_id})
     if not eval_record:
         raise HTTPException(status_code=404, detail=f"Evaluation {evaluation_id} not found")
+
+    # --- ADDED Authorization Check --- M
+    if eval_record.get("user_id") != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="User not authorized to access this evaluation",
+        )
+    # --- End Authorization Check ---
 
     if eval_record.get("status") in ["pending", "running"]:
         total = eval_record.get("total_prompt_tasks", 0)
@@ -226,9 +261,10 @@ async def list_evaluations(
     db: AsyncIOMotorDatabase = Depends(get_database),
     skip: int = 0,
     limit: int = 100,
+    current_user: UserModel = Depends(get_current_active_user)
 ):
     """Retrieve all evaluation sessions from the database."""
-    evals_cursor = db[EVAL_COLLECTION].find().sort("created_at", -1).skip(skip).limit(limit)
+    evals_cursor = db[EVAL_COLLECTION].find({"user_id": current_user.id}).sort("created_at", -1).skip(skip).limit(limit)
     evaluations = await evals_cursor.to_list(length=limit)
     # Use Evaluation model which excludes test_set_data
     return [Evaluation(**e) for e in evaluations]
@@ -242,10 +278,19 @@ async def list_evaluations(
 async def get_evaluation(
     evaluation_id: PyObjectId,
     db: AsyncIOMotorDatabase = Depends(get_database),
+    current_user: UserModel = Depends(get_current_active_user)
 ):
     """Retrieve a single evaluation session by its ID."""
     evaluation = await db[EVAL_COLLECTION].find_one({"_id": evaluation_id})
     if evaluation:
+        # --- ADDED Authorization Check --- M
+        if evaluation.get("user_id") != current_user.id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="User not authorized to access this evaluation",
+            )
+        # --- End Authorization Check ---
+
         # Use Evaluation model which excludes test_set_data
         return Evaluation(**evaluation)
     else:
@@ -261,8 +306,23 @@ async def get_evaluation(
 async def get_evaluation_results(
     evaluation_id: PyObjectId,
     db: AsyncIOMotorDatabase = Depends(get_database),
+    current_user: UserModel = Depends(get_current_active_user)
 ):
     """Retrieve all results for a given evaluation ID."""
+    # --- ADDED Authorization Check (on parent evaluation) --- M
+    parent_eval = await db[EVAL_COLLECTION].find_one(
+        {"_id": evaluation_id},
+        {"user_id": 1} # Only fetch user_id for check
+    )
+    if not parent_eval:
+        raise HTTPException(status_code=404, detail=f"Evaluation {evaluation_id} not found")
+    if parent_eval.get("user_id") != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="User not authorized to access results for this evaluation",
+        )
+    # --- End Authorization Check ---
+
     results_cursor = db[RESULTS_COLLECTION].find({"evaluation_id": evaluation_id})
     results = await results_cursor.to_list(length=None)
     return [EvaluationResult.model_validate(res) for res in results]
@@ -278,8 +338,40 @@ async def update_evaluation_result(
     result_id: PyObjectId,
     result_update: EvaluationResultUpdate,
     db: AsyncIOMotorDatabase = Depends(get_database),
+    current_user: UserModel = Depends(get_current_active_user)
 ):
     """Update the score or comment for a specific evaluation result."""
+    # --- ADDED Authorization Check (on parent evaluation) --- M
+    # 1. Get the result to find its parent evaluation ID
+    result_doc = await db[RESULTS_COLLECTION].find_one(
+        {"_id": result_id},
+        {"evaluation_id": 1} # Only fetch eval_id
+    )
+    if not result_doc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Evaluation result with ID {result_id} not found",
+        )
+    parent_eval_id = result_doc.get("evaluation_id")
+    if not parent_eval_id:
+        # Should not happen if data is consistent
+        raise HTTPException(status_code=500, detail=f"Result {result_id} is missing parent evaluation ID.")
+
+    # 2. Get the parent evaluation to check its user_id
+    parent_eval = await db[EVAL_COLLECTION].find_one(
+        {"_id": parent_eval_id},
+        {"user_id": 1} # Only fetch user_id
+    )
+    if not parent_eval:
+        # Should not happen if data is consistent
+        raise HTTPException(status_code=404, detail=f"Parent evaluation {parent_eval_id} not found for result {result_id}")
+    if parent_eval.get("user_id") != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="User not authorized to update results for this evaluation",
+        )
+    # --- End Authorization Check ---
+
     update_data = result_update.model_dump(exclude_unset=True)
     if not update_data:
         raise HTTPException(

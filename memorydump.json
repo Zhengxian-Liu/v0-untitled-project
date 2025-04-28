@@ -1,0 +1,279 @@
+{
+    "nodes": [
+      {
+        "id": "frontend",
+        "type": "Concept",
+        "name": "Frontend (Next.js)",
+        "observations": "User interface built with Next.js and React, using Shadcn UI components. Handles user interaction, makes API calls."
+      },
+      {
+        "id": "backend",
+        "type": "Concept",
+        "name": "Backend API (FastAPI)",
+        "observations": "Python backend using FastAPI, handles business logic, database interaction, external API calls (Claude), and authentication."
+      },
+      {
+        "id": "database",
+        "type": "Service",
+        "name": "MongoDB Database",
+        "observations": "Stores user data, prompt versions, evaluation results, and saved sessions. Accessed via Motor async driver."
+      },
+      {
+        "id": "nginx",
+        "type": "Service",
+        "name": "Nginx Reverse Proxy",
+        "observations": "Acts as the single entry point. Routes external requests to either the frontend or backend container based on URL path."
+      },
+      {
+        "id": "docker_compose",
+        "type": "File",
+        "name": "docker-compose.yml",
+        "observations": "Defines and orchestrates the nginx, frontend, backend, and database services, including networks and volumes."
+      },
+      {
+        "id": "dockerfile_backend",
+        "type": "File",
+        "name": "Dockerfile",
+        "observations": "Builds the Docker image for the FastAPI backend, installing Python dependencies."
+      },
+      {
+        "id": "dockerfile_frontend",
+        "type": "File",
+        "name": "Dockerfile.frontend",
+        "observations": "Builds the Docker image for the Next.js frontend using multi-stage build, installing Node dependencies and running build."
+      },
+      {
+        "id": "nginx_conf",
+        "type": "File",
+        "name": "nginx.conf",
+        "observations": "Configures Nginx routing rules: paths starting with /api/v1/ go to backend, others go to frontend."
+      },
+      {
+        "id": "api_client",
+        "type": "File",
+        "name": "lib/apiClient.ts",
+        "observations": "Frontend helper function wrapping fetch. Automatically adds API base URL and Authorization Bearer token from localStorage."
+      },
+      {
+        "id": "auth_context",
+        "type": "File",
+        "name": "lib/authContext.tsx",
+        "observations": "Frontend React context provider. Manages auth token (state & localStorage), user object state, loading state, login/logout functions. Fetches user data on load/login."
+      },
+      {
+        "id": "types_tsx",
+        "type": "File",
+        "name": "types.tsx",
+        "observations": "Defines shared TypeScript types used across the frontend (e.g., Prompt, EvaluationResult, EvaluationSession, User)."
+      },
+      {
+        "id": "main_layout",
+        "type": "Component",
+        "name": "components/main-layout.tsx",
+        "observations": "Main UI structure containing MainNav, Sidebar, and Tabs for different sections (Library, Editor, Evaluate, Saved Sessions). Uses AuthContext, manages selected prompt state, passes language context down."
+      },
+      {
+        "id": "protected_route",
+        "type": "Component",
+        "name": "components/protected-route.tsx",
+        "observations": "Wrapper component using AuthContext. Redirects to /login if no authenticated user token is found (after initial load)."
+      },
+      {
+        "id": "main_nav",
+        "type": "Component",
+        "name": "components/main-nav.tsx",
+        "observations": "Top navigation bar. Displays user info, current language workspace (from context), and Logout button."
+      },
+      {
+        "id": "prompt_library",
+        "type": "Component",
+        "name": "components/prompt-library.tsx",
+        "observations": "Displays a list of the LATEST prompt versions fetched from the backend, filtered by user's language context. Allows selecting a prompt to edit."
+      },
+      {
+        "id": "prompt_editor",
+        "type": "Component",
+        "name": "components/prompt-editor.tsx",
+        "observations": "Form for creating/editing prompts. Edits a specific version. 'Save' always creates a NEW version via PUT request. Handles sections, auto-increments version display, uses user's language context, checks production uniqueness."
+      },
+      {
+        "id": "evaluation_panel",
+        "type": "Component",
+        "name": "components/evaluation-panel.tsx",
+        "observations": "Allows comparing multiple prompt versions. Fetches latest prompts for selection, fetches specific versions for selected columns. Runs evaluations via backend background tasks. Polls for results. Displays results side-by-side. Allows scoring/commenting (persisted)."
+      },
+      {
+        "id": "saved_sessions_list",
+        "type": "Component",
+        "name": "components/saved-sessions-list.tsx",
+        "observations": "Displays a list of saved evaluation sessions fetched from the backend. Includes buttons to view/delete (view implemented with modal)."
+      },
+      {
+        "id": "view_session_modal",
+        "type": "Component",
+        "name": "components/view-session-details-modal.tsx",
+        "observations": "Dialog component to display the full details of a saved evaluation session (config and results)."
+      },
+      {
+        "id": "login_page",
+        "type": "Component",
+        "name": "app/login/page.tsx",
+        "observations": "Login form UI. Calls /token endpoint, uses AuthContext to store token, redirects on success."
+      },
+      {
+        "id": "register_page",
+        "type": "Component",
+        "name": "app/register/page.tsx",
+        "observations": "Registration form UI (username, password, language). Calls /register endpoint, redirects to login on success."
+      },
+      {
+        "id": "main_py",
+        "type": "File",
+        "name": "main.py",
+        "observations": "FastAPI application entry point. Configures app, lifespan (DB connect/disconnect), CORS middleware, global ObjectId/PyObjectId encoders, includes routers (auth, prompts, evaluations, evaluation_sessions)."
+      },
+      {
+        "id": "config_py",
+        "type": "File",
+        "name": "app/core/config.py",
+        "observations": "Defines Pydantic Settings model. Loads configuration from .env file (DB URL, API keys, JWT settings)."
+      },
+      {
+        "id": "security_py",
+        "type": "File",
+        "name": "app/core/security.py",
+        "observations": "Contains password hashing utilities (passlib) and JWT creation function (python-jose)."
+      },
+      {
+        "id": "db_client_py",
+        "type": "File",
+        "name": "app/db/client.py",
+        "observations": "Manages async MongoDB connection using Motor during application lifespan."
+      },
+      {
+        "id": "user_model",
+        "type": "File",
+        "name": "app/models/user.py",
+        "observations": "Defines Pydantic models for User (Base, Create, InDB, API Response)."
+      },
+      {
+        "id": "prompt_model",
+        "type": "File",
+        "name": "app/models/prompt.py",
+        "observations": "Defines Pydantic models for Prompt versions (Base, Create, Update, InDB, API Response). Includes versioning fields (base_prompt_id, is_latest)."
+      },
+      {
+        "id": "evaluation_model",
+        "type": "File",
+        "name": "app/models/evaluation.py",
+        "observations": "Defines Pydantic models for Evaluation runs (CreateRequest, Base, InDB, API Response) and Evaluation Results (Base, Create, Update, InDB, API Response)."
+      },
+      {
+        "id": "session_model",
+        "type": "File",
+        "name": "app/models/evaluation_session.py",
+        "observations": "Defines Pydantic models for Saved Evaluation Sessions (Create, Base, InDB, API Response, Summary) including nested config/results models."
+      },
+      {
+        "id": "common_model",
+        "type": "File",
+        "name": "app/models/common.py",
+        "observations": "Defines common Pydantic helpers, currently `PyObjectId`."
+      },
+      {
+        "id": "token_model",
+        "type": "File",
+        "name": "app/models/token.py",
+        "observations": "Defines Pydantic models for Token response (`Token`) and JWT payload data (`TokenData`)."
+      },
+      {
+        "id": "auth_routes",
+        "type": "File",
+        "name": "app/routes/auth.py",
+        "observations": "Defines API routes for /register, /token (login), /users/me. Implements OAuth2 scheme and 'get_current_user' dependency."
+      },
+      {
+        "id": "prompt_routes",
+        "type": "File",
+        "name": "app/routes/prompts.py",
+        "observations": "Defines API routes for prompts. Handles unified versioning: POST creates v1.0, PUT creates new version based on existing, GET / fetches latest, GET /{id} fetches specific version, GET /base/.../versions fetches all. Includes production uniqueness logic."
+      },
+      {
+        "id": "evaluation_routes",
+        "type": "File",
+        "name": "app/routes/evaluations.py",
+        "observations": "Defines API routes for evaluation runs. POST / starts background tasks per prompt. GET /results fetches results. PATCH /check_completion updates status. PUT /results/{id} updates score/comment."
+      },
+      {
+        "id": "session_routes",
+        "type": "File",
+        "name": "app/routes/evaluation_sessions.py",
+        "observations": "Defines API routes for saved sessions. POST / saves a session. GET / lists summaries. GET /{id} fetches full details."
+      },
+      {
+        "id": "claude_service",
+        "type": "File",
+        "name": "app/services/claude_service.py",
+        "observations": "Handles interaction with the Anthropic Claude API for text generation during evaluations."
+      },
+      {
+        "id": "versioning_concept",
+        "type": "Concept",
+        "name": "Unified Versioning",
+        "observations": "Current strategy where each document in 'prompts' collection is a specific version, linked by 'base_prompt_id'. 'is_latest' flag marks the current active version. Saving always creates a new version."
+      },
+      {
+        "id": "auth_concept",
+        "type": "Concept",
+        "name": "Authentication",
+        "observations": "Basic username/password registration. JWT Bearer token authentication for API requests. User has an associated language."
+      }
+    ],
+    "edges": [
+      { "source": "docker_compose", "target": "nginx", "label": "DEFINES_SERVICE", "description": "Defines nginx service using image and nginx.conf." },
+      { "source": "docker_compose", "target": "frontend", "label": "DEFINES_SERVICE", "description": "Defines frontend service using Dockerfile.frontend." },
+      { "source": "docker_compose", "target": "backend", "label": "DEFINES_SERVICE", "description": "Defines backend service using Dockerfile." },
+      { "source": "docker_compose", "target": "database", "label": "DEFINES_SERVICE", "description": "Defines database service using mongo image." },
+      { "source": "nginx", "target": "frontend", "label": "ROUTES_TO", "description": "Routes '/' path to frontend container." },
+      { "source": "nginx", "target": "backend", "label": "ROUTES_TO", "description": "Routes '/api/v1/' path to backend container." },
+      { "source": "frontend", "target": "api_client", "label": "USES", "description": "Components use apiClient for backend calls." },
+      { "source": "api_client", "target": "auth_context", "label": "USES", "description": "Reads token from localStorage (managed by AuthContext)." },
+      { "source": "api_client", "target": "backend", "label": "CALLS", "description": "Makes HTTP requests to backend API endpoints (via Nginx)." },
+      { "source": "main_layout", "target": "main_nav", "label": "RENDERS" },
+      { "source": "main_layout", "target": "protected_route", "label": "USES" },
+      { "source": "main_layout", "target": "prompt_library", "label": "RENDERS" },
+      { "source": "main_layout", "target": "prompt_editor", "label": "RENDERS" },
+      { "source": "main_layout", "target": "evaluation_panel", "label": "RENDERS" },
+      { "source": "main_layout", "target": "saved_sessions_list", "label": "RENDERS" },
+      { "source": "main_layout", "target": "auth_context", "label": "USES_STATE", "description": "Gets user, logout function." },
+      { "source": "protected_route", "target": "auth_context", "label": "USES_STATE", "description": "Gets token, isLoading for redirection." },
+      { "source": "prompt_library", "target": "prompt_routes", "label": "CALLS", "description": "Calls GET /prompts/ (via apiClient)." },
+      { "source": "prompt_editor", "target": "prompt_routes", "label": "CALLS", "description": "Calls PUT /prompts/{id} or POST /prompts/ (via apiClient)." },
+      { "source": "prompt_editor", "target": "prompt_routes", "label": "CALLS", "description": "Calls GET /prompts/production/ (via apiClient)." },
+      { "source": "evaluation_panel", "target": "prompt_routes", "label": "CALLS", "description": "Calls GET /prompts/ and GET /base/.../versions (via apiClient)." },
+      { "source": "evaluation_panel", "target": "evaluation_routes", "label": "CALLS", "description": "Calls POST /, PATCH /check_completion, GET /results, PUT /results/{id} (via apiClient)." },
+      { "source": "evaluation_panel", "target": "session_routes", "label": "CALLS", "description": "Calls POST / (save session) (via apiClient)." },
+      { "source": "saved_sessions_list", "target": "session_routes", "label": "CALLS", "description": "Calls GET / and GET /{id} (via apiClient)." },
+      { "source": "login_page", "target": "auth_routes", "label": "CALLS", "description": "Calls POST /token." },
+      { "source": "login_page", "target": "auth_context", "label": "USES_STATE", "description": "Calls login function." },
+      { "source": "register_page", "target": "auth_routes", "label": "CALLS", "description": "Calls POST /register." },
+      { "source": "main_py", "target": "auth_routes", "label": "INCLUDES_ROUTER" },
+      { "source": "main_py", "target": "prompt_routes", "label": "INCLUDES_ROUTER" },
+      { "source": "main_py", "target": "evaluation_routes", "label": "INCLUDES_ROUTER" },
+      { "source": "main_py", "target": "session_routes", "label": "INCLUDES_ROUTER" },
+      { "source": "main_py", "target": "config_py", "label": "USES" },
+      { "source": "main_py", "target": "db_client_py", "label": "USES" },
+      { "source": "backend", "target": "database", "label": "INTERACTS_WITH" },
+      { "source": "backend", "target": "claude_service", "label": "USES" },
+      { "source": "claude_service", "target": "config_py", "label": "USES", "description": "Reads Anthropic API Key." },
+      { "source": "auth_routes", "target": "security_py", "label": "USES" },
+      { "source": "auth_routes", "target": "user_model", "label": "USES" },
+      { "source": "auth_routes", "target": "token_model", "label": "USES" },
+      { "source": "prompt_routes", "target": "prompt_model", "label": "USES" },
+      { "source": "prompt_routes", "target": "user_model", "label": "USES", "description": "Via auth dependency." },
+      { "source": "evaluation_routes", "target": "evaluation_model", "label": "USES" },
+      { "source": "evaluation_routes", "target": "prompt_model", "label": "USES" },
+      { "source": "evaluation_routes", "target": "claude_service", "label": "USES" },
+      { "source": "session_routes", "target": "session_model", "label": "USES" }
+    ]
+  }

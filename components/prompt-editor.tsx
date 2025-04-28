@@ -31,6 +31,8 @@ import {
   BookmarkPlus,
   Bookmark,
   AlertTriangle,
+  Loader2,
+  Check,
 } from "lucide-react"
 import type { Prompt, PromptSection, SavedSection, ProductionPrompt } from "@/types"
 import { toast } from "sonner"
@@ -208,7 +210,42 @@ export function PromptEditor({ prompt, onSaveSuccess, currentLanguage }: PromptE
   const [showProductionConfirmDialog, setShowProductionConfirmDialog] = useState(false)
   // --- End Restore ---
 
+  // --- Versioning State --- M
+  const [versionHistory, setVersionHistory] = useState<Prompt[]>([])
+  const [isLoadingHistory, setIsLoadingHistory] = useState(false)
+  const [historyError, setHistoryError] = useState<string | null>(null)
+  const [currentlyLoadedVersionId, setCurrentlyLoadedVersionId] = useState<string | null>(null)
+  // --- End Versioning State ---
+
+  // --- Function to fetch version history --- M
+  const fetchVersionHistory = async (basePromptId: string) => {
+    setIsLoadingHistory(true);
+    setHistoryError(null);
+    try {
+      const url = `/prompts/base/${basePromptId}/versions`;
+      const historyData = await apiClient<Prompt[]>(url);
+      // Sort history newest first (optional, backend might already do this)
+      historyData.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+      setVersionHistory(historyData);
+      console.log("Fetched version history: ", historyData);
+    } catch (err) {
+      console.error("Error fetching version history:", err);
+      const errorMsg = err instanceof Error ? err.message : "Unknown error";
+      setHistoryError(errorMsg);
+      toast.error(`Failed to load version history: ${errorMsg}`);
+      setVersionHistory([]); // Clear history on error
+    } finally {
+      setIsLoadingHistory(false);
+    }
+  };
+  // --- End fetch function ---
+
   useEffect(() => {
+    // Reset version history when prompt changes
+    setVersionHistory([]);
+    setIsLoadingHistory(false);
+    setHistoryError(null);
+
     if (prompt) {
       // Load state from the passed prompt object
       setName(prompt.name || "")
@@ -218,6 +255,16 @@ export function PromptEditor({ prompt, onSaveSuccess, currentLanguage }: PromptE
       setSelectedProject(prompt.project)
       setIsProduction(prompt.isProduction || false)
       setVersion(prompt.version || "1.0")
+      // --- Set currently loaded ID and fetch history --- M
+      setCurrentlyLoadedVersionId(prompt.id);
+      if (prompt.base_prompt_id) {
+         fetchVersionHistory(prompt.base_prompt_id);
+      } else {
+         // This case shouldn't happen if prompts are created correctly
+         console.warn("Prompt loaded in editor is missing base_prompt_id! Cannot fetch history.");
+         setHistoryError("Cannot fetch history: Prompt base ID missing.");
+      }
+      // --- End fetch --- M
     } else {
       // Reset form for new prompt (set default sections)
       setName("")
@@ -231,6 +278,9 @@ export function PromptEditor({ prompt, onSaveSuccess, currentLanguage }: PromptE
         { id: "2", type: "context", name: "Context", content: "" },
         { id: "3", type: "instructions", name: "Instructions", content: "" },
       ])
+      // --- Clear loaded ID for new prompt --- M
+      setCurrentlyLoadedVersionId(null);
+      // --- End Clear ---
     }
   }, [prompt])
 
@@ -256,6 +306,26 @@ export function PromptEditor({ prompt, onSaveSuccess, currentLanguage }: PromptE
     };
     fetchCurrentProductionPrompt();
   }, [selectedProject, currentLanguage]);
+
+  // --- Version Select Handler --- M
+  const handleVersionSelect = (selectedPrompt: Prompt) => {
+    console.log("Loading version:", selectedPrompt.id, selectedPrompt.version);
+
+    // Update all relevant form states with the selected version's data
+    setName(selectedPrompt.name || "");
+    setDescription(selectedPrompt.description || "");
+    setSections(selectedPrompt.sections && selectedPrompt.sections.length > 0 ? selectedPrompt.sections : []);
+    setSelectedTags(selectedPrompt.tags || []);
+    setSelectedProject(selectedPrompt.project);
+    setIsProduction(selectedPrompt.isProduction || false);
+    setVersion(selectedPrompt.version || "?.?"); // Update displayed version
+
+    // Update the tracker for which version is currently loaded
+    setCurrentlyLoadedVersionId(selectedPrompt.id);
+
+    toast.info(`Loaded version ${selectedPrompt.version}`);
+  };
+  // --- End Version Select Handler ---
 
   const handleTagToggle = (tag: string) => {
     if (selectedTags.includes(tag)) {
@@ -417,7 +487,14 @@ export function PromptEditor({ prompt, onSaveSuccess, currentLanguage }: PromptE
     const method = isCreatingNew ? "POST" : "PUT";
     const endpoint = isCreatingNew
       ? `/prompts/`
-      : `/prompts/${prompt.id}`;
+      : `/prompts/${currentlyLoadedVersionId}`;
+
+    // Add a check for PUT if the loaded ID is missing (shouldn't happen)
+    if (method === "PUT" && !currentlyLoadedVersionId) {
+        toast.error("Cannot save: No base version loaded in the editor.");
+        console.error("Save aborted: currentlyLoadedVersionId is null for PUT request.");
+        return;
+    }
 
     // Payload preparation - needs slight adjustment based on method
     const basePayload = {
@@ -455,8 +532,13 @@ export function PromptEditor({ prompt, onSaveSuccess, currentLanguage }: PromptE
 
       // Update local state
       setVersion(savedPromptVersion.version || "?.?");
-      // If creating, maybe update the 'prompt' prop reference somehow?
-      // For now, rely on library refresh via onSaveSuccess
+      // Update the currently loaded ID to the newly saved version's ID
+      setCurrentlyLoadedVersionId(savedPromptVersion.id);
+
+      // Refetch history to include the new version
+      if (savedPromptVersion.base_prompt_id) {
+          fetchVersionHistory(savedPromptVersion.base_prompt_id);
+      }
 
       if (onSaveSuccess) {
         onSaveSuccess();
@@ -478,10 +560,45 @@ export function PromptEditor({ prompt, onSaveSuccess, currentLanguage }: PromptE
           <Button variant="outline" size="sm" onClick={() => setShowPreview(!showPreview)}>
             {showPreview ? "Hide Preview" : "Show Preview"}
           </Button>
-          <div className="flex items-center border rounded-md px-2 py-1 h-9">
-            <span className="text-sm text-muted-foreground mr-1">Version:</span>
-            <span className="text-sm font-medium">{version}</span>
-          </div>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="sm" className="h-9">
+                Version: {version}
+                {isLoadingHistory ? (
+                  <Loader2 className="ml-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <ChevronDown className="ml-2 h-4 w-4" />
+                )}
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-64">
+              <div className="px-2 py-1.5 text-sm font-semibold">Version History</div>
+              {historyError && (
+                 <div className="px-2 py-1.5 text-sm text-destructive">{historyError}</div>
+              )}
+              {!isLoadingHistory && !historyError && versionHistory.length === 0 && (
+                <div className="px-2 py-1.5 text-sm text-muted-foreground">(No history found)</div>
+              )}
+              {!isLoadingHistory && !historyError && versionHistory.map((histPrompt) => (
+                <DropdownMenuItem
+                  key={histPrompt.id}
+                  onSelect={() => handleVersionSelect(histPrompt)}
+                  className="cursor-pointer"
+                  disabled={histPrompt.id === currentlyLoadedVersionId}
+                >
+                  <span className="mr-auto">
+                    Version {histPrompt.version}
+                    {histPrompt.is_latest && <Badge variant="secondary" className="ml-2">Latest</Badge>}
+                    {histPrompt.isProduction && <Badge variant="destructive" className="ml-2">Prod</Badge>}
+                  </span>
+                  <span className="text-xs text-muted-foreground">
+                    {new Date(histPrompt.created_at).toLocaleDateString()}
+                  </span>
+                  {histPrompt.id === currentlyLoadedVersionId && <Check className="ml-2 h-4 w-4"/>}
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
 

@@ -233,6 +233,16 @@ async def save_new_version_from_existing(
         logger.error(f"---> save_new_version: Base version doc {version_id} evaluated as NOT FOUND.")
         raise HTTPException(status_code=404, detail=f"Base prompt version {version_id} not found or has been deleted.")
 
+    # --- ADDED Language Check ---
+    base_language = base_version_doc.get("language")
+    logger.info(f"---> save_new_version: Language Check. Base Lang: {base_language}, User Lang: {current_user.language} (User: {current_user.username})")
+    if base_language != current_user.language:
+         raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="User cannot edit a prompt from a different language",
+        )
+    # --- End Language Check ---
+
     base_prompt_id = base_version_doc.get("base_prompt_id")
     if not base_prompt_id:
         logger.info(f"---> save_new_version: Found base_prompt_id: {base_prompt_id} (Type: {type(base_prompt_id)})")

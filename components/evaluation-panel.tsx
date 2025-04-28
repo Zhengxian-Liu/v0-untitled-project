@@ -484,7 +484,24 @@ export function EvaluationPanel({ currentLanguage }: EvaluationPanelProps) {
         setEvaluationStatus(evaluationData.status);
         toast.success(`Evaluation ${evaluationData.id} started successfully!`);
         // --- End Use ---
-        // ... set pending outputs ...
+
+        // --- ADDED: Populate pendingOutputs --- M
+        const initialPending = new Set<string>();
+        // Use the filtered testSetData that was actually sent
+        testSetData.forEach((testItem, rowIndex) => {
+            // Find the original row ID (assuming testRows order matches testSetData)
+            const originalRowId = testRows.find(r => r.sourceText === testItem.source_text)?.id;
+            if (originalRowId) {
+                 columns.forEach(col => { // Iterate through columns with selected versions
+                    if (col.selectedVersionId && promptIds.includes(col.selectedVersionId)) { // Ensure the column was part of the request
+                        initialPending.add(`${originalRowId}-${col.id}`);
+                    }
+                 });
+             }
+        });
+        setPendingOutputs(initialPending);
+        console.log("Initialized pending outputs:", initialPending);
+        // --- End Populate --- M
 
     } catch (error) {
         console.error("Failed to start evaluation:", error);
@@ -566,23 +583,13 @@ export function EvaluationPanel({ currentLanguage }: EvaluationPanelProps) {
     // 2. Call Backend
     try {
       // --- FIX: Use Absolute Backend URL --- M
-      const backendUrl = `/evaluation-sessions`;
-      const response = await apiClient(backendUrl, {
-      // --- End FIX ---
+      const backendUrl = `/evaluation-sessions/`;
+      // Directly await apiClient, which handles response parsing/errors
+      const savedSession = await apiClient(backendUrl, {
         method: "POST",
         body: JSON.stringify(sessionData),
       });
 
-      if (!response.ok) {
-        let errorDetail = `HTTP error! Status: ${response.status}`;
-        try {
-          const errorData = await response.json();
-          errorDetail = errorData.detail || errorDetail;
-        } catch (e) { /* Ignore */ }
-        throw new Error(errorDetail);
-      }
-
-      const savedSession = await response.json();
       console.log("Evaluation session saved:", savedSession);
       toast.success(`Evaluation session saved successfully (ID: ${savedSession.id})`);
 

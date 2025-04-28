@@ -380,7 +380,7 @@ async def update_evaluation_result(
 
     update_result = await db[RESULTS_COLLECTION].update_one(
         {"_id": result_id},
-        {"set": update_data}
+        {"$set": update_data}
     )
 
     if update_result.matched_count == 0:

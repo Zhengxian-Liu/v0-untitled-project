@@ -45,6 +45,7 @@ app = FastAPI(
 origins = [
     "http://localhost:3000",
     "http://127.0.0.1:3000",
+    "https://c95c-111-246-80-120.ngrok-free.app",
     # Add any other origins if needed
     # "*" # Allows all origins (use with caution, less secure)
 ]

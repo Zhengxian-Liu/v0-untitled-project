@@ -43,6 +43,8 @@ services:
   database:
     image: mongo:latest
     container_name: promptcraft_mongo_db
+    ports:
+     - "127.0.0.1:27017:27017" # Map host localhost port 27017 to container port 27017
     volumes:
       - mongo_data:/data/db # Persist data using a named volume
     # Optional: Add healthcheck for MongoDB

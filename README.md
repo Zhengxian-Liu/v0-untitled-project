@@ -2,6 +2,18 @@
 
 This repository contains the backend API for the PromptCraft application, designed to manage AI prompts, run evaluations, and integrate with various AI models.
 
+## TODO / Future Enhancements
+
+*   **Protect All Endpoints:** Add `Depends(get_current_active_user)` to all relevant prompt, evaluation, and session endpoints to ensure proper authentication and authorization.
+*   **Refine Delete Logic:** Determine and implement the desired behavior for deleting prompt versions (e.g., delete all in base, only non-latest, cascade deletes?).
+*   **Evaluation Panel Features:** Implement remaining features like Test Set Upload/Standardized Sets, Export, Diff Highlighting, Model Selection.
+*   **Prompt Editor Features:** Add Tagging, Share as Example, Branching.
+*   **Fix Hydration Error:** Investigate and fix the root cause of the theme-related hydration warning in the frontend.
+*   **UI/UX Refinements:** Improve user feedback, add loading states, potentially add debouncing for comment saving.
+*   **Unit/Integration Tests:** Add comprehensive tests for backend and potentially frontend.
+*   **User Management UI:** Add frontend UI for user profile settings (e.g., changing language, password).
+*   **Workspace Context:** Replace simulated language context with a proper user/workspace system.
+
 ## Project Structure
 
 ```

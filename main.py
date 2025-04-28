@@ -12,8 +12,8 @@ ENCODERS_BY_TYPE[PyObjectId] = str
 
 from app.core.config import settings
 from app.db.client import connect_to_mongo, close_mongo_connection
-from app.routes import prompts, evaluations # Import the evaluations router
-from app.routes import evaluation_sessions # Import the new router
+from app.routes import prompts, evaluations, evaluation_sessions
+from app.routes import auth # Import the auth router
 
 # Configure logging
 logging.basicConfig(level=settings.logging_level,
@@ -65,11 +65,10 @@ async def ping():
 
 
 # Include the routers
+app.include_router(auth.router, prefix="/api/v1/auth", tags=["Authentication"]) # Add Auth router
 app.include_router(prompts.router, prefix="/api/v1/prompts", tags=["Prompts"])
 app.include_router(evaluations.router, prefix="/api/v1/evaluations", tags=["Evaluations"])
-# --- Add Session Router ---
 app.include_router(evaluation_sessions.router, prefix="/api/v1/evaluation-sessions", tags=["Evaluation Sessions"])
-# --- End Add ---
 
 # Placeholder for future evaluation router
 # from app.routes import evaluations

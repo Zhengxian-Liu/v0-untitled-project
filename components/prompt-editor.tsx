@@ -36,6 +36,7 @@ import type { Prompt, PromptSection, SavedSection, ProductionPrompt } from "@/ty
 import { toast } from "sonner"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { apiClient } from "@/lib/apiClient"
 
 type Template = {
   id: string
@@ -182,8 +183,6 @@ interface PromptEditorProps {
 // --- Constant for Select placeholder value --- M
 const SELECT_PLACEHOLDER_VALUE = "--none--";
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "/api/v1";
-
 // Use the updated Props type
 export function PromptEditor({ prompt, onSaveSuccess, currentLanguage }: PromptEditorProps) {
   const [name, setName] = useState("")
@@ -235,37 +234,25 @@ export function PromptEditor({ prompt, onSaveSuccess, currentLanguage }: PromptE
     }
   }, [prompt])
 
-  // Effect to check for existing production prompt
+  // Effect to check production status
   useEffect(() => {
-    const HARDCODED_LANGUAGE = "en";
     const fetchCurrentProductionPrompt = async () => {
       if (selectedProject && currentLanguage) {
-        setIsLoadingProductionCheck(true);
-        setCurrentProductionPrompt(null); // Reset before fetching
         try {
-          // --- Use Env Var for URL --- M
-          const url = `${API_BASE_URL}/prompts/production/?project=${encodeURIComponent(selectedProject)}&language=${encodeURIComponent(currentLanguage)}`;
-          const response = await fetch(url);
+          // --- Use apiClient --- M
+          const url = `/prompts/production/?project=${encodeURIComponent(selectedProject)}&language=${encodeURIComponent(currentLanguage)}`;
+          const data = await apiClient<Prompt>(url);
           // --- End Use --- M
-
-          if (response.ok) {
-            const data: Prompt = await response.json();
-            setCurrentProductionPrompt(data);
-          } else if (response.status === 404) {
+          setCurrentProductionPrompt(data);
+        } catch (error: any) {
+          if (error.message.includes("404")) { // Check error message for 404
             setCurrentProductionPrompt(null);
           } else {
-            console.error("Error fetching production prompt status:", response.statusText);
+            console.error("Error fetching production prompt status:", error);
             setCurrentProductionPrompt(null);
           }
-        } catch (error) {
-          console.error("Failed to fetch production prompt status:", error);
-          setCurrentProductionPrompt(null);
-        } finally {
-          setIsLoadingProductionCheck(false);
-        }
-      } else {
-        setCurrentProductionPrompt(null);
-      }
+        } finally { setIsLoadingProductionCheck(false); }
+      } else { setCurrentProductionPrompt(null); }
     };
     fetchCurrentProductionPrompt();
   }, [selectedProject, currentLanguage]);
@@ -428,9 +415,9 @@ export function PromptEditor({ prompt, onSaveSuccess, currentLanguage }: PromptE
     // --- MODIFIED: Handle both Create (POST) and Save New Version (PUT) --- M
     const isCreatingNew = !prompt; // True if prompt prop is null
     const method = isCreatingNew ? "POST" : "PUT";
-    const url = isCreatingNew
-      ? `${API_BASE_URL}/prompts/`
-      : `${API_BASE_URL}/prompts/${prompt.id}`; // Use prompt.id for PUT base
+    const endpoint = isCreatingNew
+      ? `/prompts/`
+      : `/prompts/${prompt.id}`;
 
     // Payload preparation - needs slight adjustment based on method
     const basePayload = {
@@ -451,29 +438,16 @@ export function PromptEditor({ prompt, onSaveSuccess, currentLanguage }: PromptE
 
     // --- End MODIFICATION ---
 
-    console.log(`Attempting to ${method} prompt data to ${url}:`, promptData);
+    console.log(`Attempting to ${method} prompt data to ${endpoint}:`, promptData);
 
     try {
-      const response = await fetch(url, {
+      // --- Use apiClient --- M
+      const savedPromptVersion = await apiClient<Prompt>(endpoint, {
         method: method,
-        headers: {
-          "Content-Type": "application/json",
-        },
         body: JSON.stringify(promptData),
+        // apiClient sets Content-Type header automatically for JSON body
       });
-
-      if (!response.ok) {
-        let errorDetail = `HTTP error! status: ${response.status}`;
-        try {
-            const errorData = await response.json();
-            errorDetail = errorData.detail || errorDetail;
-        } catch (e) { /* Ignore JSON parsing error */ }
-        console.error("Failed to save prompt:", errorDetail);
-        toast.error(`Error saving prompt: ${errorDetail}`);
-        throw new Error(errorDetail);
-      }
-
-      const savedPromptVersion: Prompt = await response.json();
+      // --- End Use --- M
       const successMessage = isCreatingNew
         ? `Prompt created successfully as version ${savedPromptVersion.version}!`
         : `Prompt saved successfully as new version ${savedPromptVersion.version}!`;
@@ -839,3 +813,4 @@ export function PromptEditor({ prompt, onSaveSuccess, currentLanguage }: PromptE
     </div>
   )
 }
+

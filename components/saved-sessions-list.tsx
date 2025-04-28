@@ -5,13 +5,12 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { Eye, Trash2, Loader2 } from 'lucide-react'; // Icons for actions and Loader2
+import { apiClient } from "@/lib/apiClient"; // Import helper
 
 // Import the summary type we expect from the API
 import type { EvaluationSessionSummary, EvaluationSession } from "@/types";
 // Import the modal component
 import { ViewSessionDetailsModal } from './view-session-details-modal';
-
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "/api/v1";
 
 export function SavedSessionsList() {
     const [sessions, setSessions] = useState<EvaluationSessionSummary[]>([]);
@@ -30,16 +29,9 @@ export function SavedSessionsList() {
             setIsLoading(true);
             setError(null);
             try {
-                const response = await fetch(`${API_BASE_URL}/evaluation-sessions/`);
-                if (!response.ok) {
-                    let errorDetail = `HTTP error! status: ${response.status}`;
-                    try {
-                        const errorData = await response.json();
-                        errorDetail = errorData.detail || errorDetail;
-                    } catch (e) { /* Ignore JSON parsing error */ }
-                    throw new Error(errorDetail);
-                }
-                const data = await response.json();
+                // --- Use apiClient --- M
+                const data = await apiClient<EvaluationSessionSummary[]>('/evaluation-sessions/');
+                // --- End Use --- M
                 // Ensure data matches expected type (basic check)
                 if (Array.isArray(data)) {
                      setSessions(data as EvaluationSessionSummary[]);
@@ -57,7 +49,7 @@ export function SavedSessionsList() {
         };
 
         // Add console log
-        console.log("SavedSessionsList: Fetching from URL:", `${API_BASE_URL}/evaluation-sessions/`);
+        console.log("SavedSessionsList: Fetching from URL:");
         fetchSessions();
     }, []); // Run once on mount
 
@@ -68,16 +60,9 @@ export function SavedSessionsList() {
         setSelectedSessionDetails(null); // Clear previous
         setIsViewModalOpen(false); // Close initially
         try {
-            const response = await fetch(`${API_BASE_URL}/evaluation-sessions/${sessionId}`);
-            if (!response.ok) {
-                 let errorDetail = `HTTP error! status: ${response.status}`;
-                 try {
-                     const errorData = await response.json();
-                     errorDetail = errorData.detail || errorDetail;
-                 } catch (e) { /* Ignore */ }
-                 throw new Error(errorDetail);
-            }
-            const data = await response.json();
+            // --- Use apiClient --- M
+            const data = await apiClient<EvaluationSession>(`/evaluation-sessions/${sessionId}`);
+            // --- End Use --- M
             setSelectedSessionDetails(data as EvaluationSession);
             setIsViewModalOpen(true); // Open modal with fetched data
 

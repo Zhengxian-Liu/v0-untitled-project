@@ -126,4 +126,29 @@ export type EvaluationSessionSummary = {
   saved_at: string;
 }
 
+// --- NEW: Evaluation Run Type --- M
+// Represents an ongoing or completed evaluation run (from /evaluations endpoint)
+export type Evaluation = {
+  id: string;
+  prompt_ids: string[]; // List of prompt version IDs used
+  test_set_name: string | null;
+  status: string; // e.g., pending, running, completed, failed
+  created_at: string;
+  completed_at: string | null;
+  total_prompt_tasks?: number | null; // Optional counters
+  completed_prompt_tasks?: number | null;
+  // Does NOT include test_set_data or results by default
+}
+// --- End NEW Type ---
+
 // --- End Evaluation Types ---
+
+// --- User Type (from backend response model) --- M
+export type User = {
+  id: string;
+  username: string;
+  language: string;
+  disabled: boolean | null;
+  // Add other fields if needed later (e.g., created_at)
+}
+// --- End User Type ---

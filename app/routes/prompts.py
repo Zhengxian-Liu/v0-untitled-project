@@ -11,6 +11,8 @@ from datetime import datetime
 from app.models.common import PyObjectId
 from app.models.prompt import Prompt, PromptCreate, PromptUpdate, PromptSection
 from app.db.client import get_database
+from app.routes.auth import get_current_active_user
+from app.models.user import User as UserModel
 
 router = APIRouter()
 PROMPT_COLLECTION = "prompts"
@@ -56,10 +58,11 @@ async def _ensure_unique_production_prompt(
     description="Creates the initial version (v1.0) of a prompt.",
 )
 async def create_prompt(
-    prompt_in: PromptCreate, # Uses PromptCreate model
+    prompt_in: PromptCreate,
     db: AsyncIOMotorDatabase = Depends(get_database),
+    current_user: UserModel = Depends(get_current_active_user)
 ):
-    """Create the first version (1.0) of a new prompt."""
+    """Create the first version (1.0) of a new prompt for the current user's language."""
     prompt_dict = prompt_in.model_dump(exclude_unset=True)
     now = datetime.utcnow()
 
@@ -73,18 +76,21 @@ async def create_prompt(
     prompt_dict["updated_at"] = now
     # --- End versioning fields --- M
 
+    # --- Set Language from User Context --- M
+    prompt_dict["language"] = current_user.language
+    # --- End Set Language ---
+
     # Ensure sections are present
     if "sections" not in prompt_dict:
         prompt_dict["sections"] = []
     # Text is optional and not explicitly set here
 
-    # Check production uniqueness (if applicable on first creation)
+    # Check production uniqueness
     if prompt_dict.get("isProduction") is True:
         await _ensure_unique_production_prompt(
             db,
             prompt_dict.get("project"),
-            prompt_dict.get("language"),
-            # No need to exclude ID on create
+            prompt_dict.get("language"), # Use language set from user
         )
 
     # Insert the new version document
@@ -114,10 +120,12 @@ async def read_prompts(
     db: AsyncIOMotorDatabase = Depends(get_database),
     skip: int = 0,
     limit: int = 100,
+    current_user: UserModel = Depends(get_current_active_user)
 ):
     """Retrieve the latest version of all prompts with pagination."""
-    # --- Add is_latest filter --- M
-    prompts_cursor = db[PROMPT_COLLECTION].find({"is_latest": True}).skip(skip).limit(limit)
+    # --- Filter by user language --- M
+    find_filter = {"is_latest": True, "language": current_user.language}
+    prompts_cursor = db[PROMPT_COLLECTION].find(find_filter).skip(skip).limit(limit)
     # --- End filter ---
     prompts_raw = await prompts_cursor.to_list(length=limit)
     validated_prompts = []

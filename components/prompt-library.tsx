@@ -7,8 +7,7 @@ import { Badge } from "@/components/ui/badge"
 import { CheckCircle2 } from "lucide-react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import type { Prompt, EvaluationSessionSummary } from "@/types"
-
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "/api/v1";
+import { apiClient } from "@/lib/apiClient"
 
 const availableLanguages = [
   { id: "all", name: "All Languages" },
@@ -42,29 +41,23 @@ export function PromptLibrary({ onPromptSelect, currentLanguage }: PromptLibrary
       setIsLoading(true)
       setError(null)
       try {
-        const fetchUrl = `${API_BASE_URL}/prompts/`;
-        console.log("PromptLibrary: Fetching from URL:", fetchUrl);
-        const response = await fetch(fetchUrl);
-        if (!response.ok) {
-          let errorDetail = `HTTP error! status: ${response.status}`;
-          try {
-            const errorData = await response.json();
-            errorDetail = errorData.detail || errorDetail;
-          } catch (e) { /* Ignore JSON parsing error */ }
-          throw new Error(errorDetail);
+        const data = await apiClient<Prompt[]>('/prompts/')
+        console.log("PromptLibrary: Fetched data:", data)
+        if (Array.isArray(data)) {
+          setPrompts(data)
+        } else {
+          throw new Error("Invalid data format received from API")
         }
-        const data = await response.json();
-        setPrompts(data as Prompt[]);
       } catch (err) {
-        console.error("Failed to fetch prompts:", err);
-        setError(err instanceof Error ? err.message : "An unknown error occurred");
+        console.error("Failed to fetch prompts:", err)
+        setError(err instanceof Error ? err.message : "An unknown error occurred")
       } finally {
-        setIsLoading(false);
+        setIsLoading(false)
       }
-    };
+    }
 
-    fetchPrompts();
-  }, []);
+    fetchPrompts()
+  }, [])
 
   const projects = [
     { id: "all", name: "All Projects" },
@@ -80,7 +73,7 @@ export function PromptLibrary({ onPromptSelect, currentLanguage }: PromptLibrary
         (prompt.description && prompt.description.toLowerCase().includes(searchQuery.toLowerCase()))) &&
       (selectedProject === "all" || prompt.project === selectedProject) &&
       (!showProductionOnly || prompt.isProduction === true)
-  );
+  )
 
   return (
     <div className="space-y-4">

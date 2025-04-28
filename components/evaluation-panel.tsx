@@ -11,11 +11,10 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Download, Upload, Plus, Play, Trash2, Eye, EyeOff, Settings, Loader2 } from "lucide-react"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-import type { Prompt, EvaluationResult } from "@/types"
+import type { Prompt, EvaluationResult, Evaluation } from "@/types"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { toast } from "sonner"
-
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "/api/v1"
+import { apiClient } from "@/lib/apiClient"
 
 // Mock data for AI models
 const mockModels = [
@@ -140,14 +139,8 @@ export function EvaluationPanel({ currentLanguage }: EvaluationPanelProps) {
         // Fetch prompts relevant to the current language context?
         // Adjust API endpoint if filtering by language is possible/needed
         // const fetchUrl = `/api/v1/prompts/?language=${currentLanguage}`;
-        const fetchUrl = `${API_BASE_URL}/prompts/`;
-
-        const response = await fetch(fetchUrl);
-        if (!response.ok) {
-          throw new Error(`Failed to fetch prompts: ${response.statusText}`);
-        }
-        const data = await response.json();
-        setAvailablePrompts(data as Prompt[]);
+        const data = await apiClient<Prompt[]>('/prompts/');
+        setAvailablePrompts(data);
 
         // --- Initialize default columns with basePromptId --- M
         if (data.length > 0) {
@@ -192,13 +185,9 @@ export function EvaluationPanel({ currentLanguage }: EvaluationPanelProps) {
 
     setColumns(prev => prev.map(col => col.id === columnId ? { ...col, isLoadingVersions: true, versionsError: null } : col));
     try {
-        const url = `${API_BASE_URL}/prompts/base/${basePromptId}/versions`;
-        const response = await fetch(url);
-        if (!response.ok) {
-            throw new Error(`Failed to fetch versions: ${response.statusText}`);
-        }
-        const versionsData = await response.json();
-        setColumns(prev => prev.map(col => col.id === columnId ? { ...col, availableVersions: versionsData as Prompt[], isLoadingVersions: false } : col));
+        const url = `/prompts/base/${basePromptId}/versions`;
+        const versionsData = await apiClient<Prompt[]>(url);
+        setColumns(prev => prev.map(col => col.id === columnId ? { ...col, availableVersions: versionsData, isLoadingVersions: false } : col));
     } catch (err) {
         console.error(`Error fetching versions for column ${columnId}:`, err);
         const errorMsg = err instanceof Error ? err.message : "Unknown error";
@@ -273,19 +262,10 @@ export function EvaluationPanel({ currentLanguage }: EvaluationPanelProps) {
     // --- Call Backend API --- M
     console.log(`Updating score for result ${resultId} to ${score}`);
     try {
-        const response = await fetch(`${API_BASE_URL}/evaluations/results/${resultId}`, {
+        await apiClient(`/evaluations/results/${resultId}`, {
             method: "PUT",
-            headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ score: score })
         });
-        if (!response.ok) {
-            let errorDetail = `HTTP error! Status: ${response.status}`;
-            try {
-                const errorData = await response.json();
-                errorDetail = errorData.detail || errorDetail;
-            } catch (e) { /* Ignore */ }
-            throw new Error(errorDetail);
-        }
         // Success - state is already updated optimistically
         // Optionally show a subtle success indicator?
     } catch (error) {
@@ -308,19 +288,10 @@ export function EvaluationPanel({ currentLanguage }: EvaluationPanelProps) {
       // TODO: Implement debouncing for comment input later
       console.log(`Updating comment for result ${resultId}`);
       try {
-          const response = await fetch(`${API_BASE_URL}/evaluations/results/${resultId}`, {
+          await apiClient(`/evaluations/results/${resultId}`, {
               method: "PUT",
-              headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ comment: comment })
           });
-          if (!response.ok) {
-              let errorDetail = `HTTP error! Status: ${response.status}`;
-              try {
-                  const errorData = await response.json();
-                  errorDetail = errorData.detail || errorDetail;
-              } catch (e) { /* Ignore */ }
-              throw new Error(errorDetail);
-          }
           // Success - state is already updated optimistically
       } catch (error) {
           console.error(`Failed to update comment for result ${resultId}:`, error);
@@ -385,27 +356,20 @@ export function EvaluationPanel({ currentLanguage }: EvaluationPanelProps) {
     console.log(`Polling results for evaluation ID: ${evalId}`);
     let latestStatus = evaluationStatus;
     try {
-        // 1. Check completion status first (this also returns the eval object)
-        const statusResponse = await fetch(`${API_BASE_URL}/evaluations/${evalId}/check_completion`, { method: 'PATCH' });
-        if (statusResponse.ok) {
-            const evalData = await statusResponse.json();
-            latestStatus = evalData.status;
-            setEvaluationStatus(latestStatus);
-        } else {
-             console.warn(`Failed to check/update completion status: ${statusResponse.statusText}`);
-             // Continue to fetch results anyway
-        }
+        // 1. Check completion status first
+        // apiClient throws on non-ok status, so we check response directly
+        const evalData = await apiClient<Evaluation>(`/evaluations/${evalId}/check_completion`, { method: 'PATCH' });
+        latestStatus = evalData.status;
+        setEvaluationStatus(latestStatus);
 
-        // 2. Fetch the results
-        const resultsResponse = await fetch(`${API_BASE_URL}/evaluations/${evalId}/results`);
-        if (!resultsResponse.ok) {
-             throw new Error(`Fetch results failed: ${resultsResponse.statusText}`);
-        }
-        const resultsData: EvaluationResult[] = await resultsResponse.json();
+        // 2. Fetch the results (only if still needed?)
+        // If check_completion returns updated data, maybe we don't need separate results call?
+        // Assuming for now we still need it:
+        const resultsData = await apiClient<EvaluationResult[]>(`/evaluations/${evalId}/results`);
         setEvaluationResults(resultsData);
         console.log("Fetched results:", resultsData);
 
-        // 3. Update pending state based on fetched results
+        // 3. Update pending state
         setPendingOutputs(prevPending => {
             const newPending = new Set(prevPending);
             // Find mapping from result to rowId (using sourceText for now)
@@ -438,12 +402,8 @@ export function EvaluationPanel({ currentLanguage }: EvaluationPanelProps) {
     } catch (error) {
         console.error("Failed during results fetch/polling:", error);
         toast.error(`Failed to fetch results: ${error instanceof Error ? error.message : "Unknown error"}`);
-        // Don't set status to failed here, rely on check_completion endpoint?
-        // Maybe stop polling on error?
         clearPolling();
         setIsLoading(false);
-    } finally {
-        // setIsLoadingResults(false);
     }
   };
   // --- End Fetch Results ---
@@ -514,44 +474,17 @@ export function EvaluationPanel({ currentLanguage }: EvaluationPanelProps) {
     console.log("Evaluation Request Body:", requestBody);
 
     try {
-        const response = await fetch(`${API_BASE_URL}/evaluations/`, {
+        const evaluationData = await apiClient<Evaluation>(`/evaluations/`, {
             method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-            },
             body: JSON.stringify(requestBody),
         });
-
-        if (!response.ok) {
-            let errorDetail = `HTTP error! Status: ${response.status}`;
-            try {
-                const errorData = await response.json();
-                errorDetail = errorData.detail || errorDetail;
-            } catch (e) { /* Ignore */ }
-            throw new Error(errorDetail);
-        }
-
-        const evaluationData = await response.json();
+        // --- Use returned data directly --- M
         console.log("Evaluation started:", evaluationData);
         setCurrentEvaluationId(evaluationData.id);
         setEvaluationStatus(evaluationData.status);
         toast.success(`Evaluation ${evaluationData.id} started successfully!`);
-
-        // --- Set Pending Outputs --- M
-        const newPending = new Set<string>();
-        testRows.forEach(row => {
-            // Only include rows that were actually sent
-            if (row.sourceText.trim() !== "") {
-                columns.forEach(col => {
-                    newPending.add(`${row.id}-${col.id}`);
-                });
-            }
-        });
-        setPendingOutputs(newPending);
-        console.log("Pending outputs set:", newPending);
-        // --- End Set Pending ---
-
-        // TODO: Implement polling
+        // --- End Use ---
+        // ... set pending outputs ...
 
     } catch (error) {
         console.error("Failed to start evaluation:", error);
@@ -633,11 +566,10 @@ export function EvaluationPanel({ currentLanguage }: EvaluationPanelProps) {
     // 2. Call Backend
     try {
       // --- FIX: Use Absolute Backend URL --- M
-      const backendUrl = `${API_BASE_URL}/evaluation-sessions`;
-      const response = await fetch(backendUrl, {
+      const backendUrl = `/evaluation-sessions`;
+      const response = await apiClient(backendUrl, {
       // --- End FIX ---
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(sessionData),
       });
 

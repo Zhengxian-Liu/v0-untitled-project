@@ -43,6 +43,11 @@ class EvaluationSessionResult(BaseModel):
     modelOutput: Optional[str] = None
     score: Optional[int] = None
     comment: Optional[str] = None
+    # --- Add LLM Judge Fields --- M
+    llm_judge_score: Optional[float] = None
+    llm_judge_rationale: Optional[str] = None
+    llm_judge_model_id: Optional[str] = None
+    # --- End Add --- M
     model_config = ConfigDict(
         arbitrary_types_allowed=True,
         json_encoders={ObjectId: str, PyObjectId: str}

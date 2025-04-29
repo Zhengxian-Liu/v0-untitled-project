@@ -615,7 +615,11 @@ export function EvaluationPanel({ currentLanguage }: EvaluationPanelProps) {
           referenceText: res.reference_text,
           modelOutput: res.model_output,
           score: res.score,
-          comment: res.comment
+          comment: res.comment,
+          // Add LLM judge fields
+          llm_judge_score: res.llm_judge_score,
+          llm_judge_rationale: res.llm_judge_rationale,
+          llm_judge_model_id: res.llm_judge_model_id
       }))
     };
 

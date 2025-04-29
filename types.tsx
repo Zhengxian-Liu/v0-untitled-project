@@ -113,6 +113,11 @@ export type EvaluationSessionResultItem = { // Renamed to avoid conflict
   modelOutput: string | null;
   score: number | null;
   comment: string | null;
+  // --- Add LLM Judge Fields --- M
+  llm_judge_score?: number | null;
+  llm_judge_rationale?: string | null;
+  llm_judge_model_id?: string | null;
+  // --- End Add --- M
 }
 
 export type EvaluationSession = {

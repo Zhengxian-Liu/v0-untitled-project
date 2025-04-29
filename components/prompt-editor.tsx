@@ -327,6 +327,22 @@ export function PromptEditor({ prompt, onSaveSuccess, currentLanguage }: PromptE
   };
   // --- End Version Select Handler ---
 
+  // --- Fixed Prompt Parts --- M
+  // TODO: Align these precisely with backend constants/logic
+  const FIXED_OUTPUT_REQUIREMENT = `Assistant:\n<translated_text>`; // Example based on prompt_logic.md
+  const TASK_INFO_TEMPLATE = `\
+<your_task>
+    <previous_sentence_context>{PREVIOUS_CONTEXT}</previous_sentence_context>  // Context for reference only
+    <source_text>{SOURCE_TEXT}</source_text>  // Part to be translated
+    <following_sentence_context>{FOLLOWING_CONTEXT}</following_sentence_context> // Context for reference only
+    <target_language>{TARGET_LANGUAGE}</target_language>
+    <terminology>{TERMINOLOGY}</terminology> // List of terms to be respected
+    <similar_translations>{SIMILAR_TRANSLATIONS}</similar_translations> // Similar translations with similarity percentages
+    <additional_instructions>{ADDITIONAL_INSTRUCTIONS}</additional_instructions>  // some additional instructions about this file that can help on translation
+  </your_task>
+`;
+  // --- End Fixed Parts ---
+
   const handleTagToggle = (tag: string) => {
     if (selectedTags.includes(tag)) {
       setSelectedTags(selectedTags.filter((t) => t !== tag))
@@ -479,6 +495,50 @@ export function PromptEditor({ prompt, onSaveSuccess, currentLanguage }: PromptE
   };
   // --- End Restore ---
 
+  // --- Constants and Helper for Variable Highlighting --- M
+  const KNOWN_VARIABLES = [
+      "{SOURCE_TEXT}", "{TARGET_LANGUAGE}", "{PREVIOUS_CONTEXT}", "{FOLLOWING_CONTEXT}", 
+      "{TERMINOLOGY}", "{SIMILAR_TRANSLATIONS}", "{ADDITIONAL_INSTRUCTIONS}", 
+      // Future placeholders from prompt_logic.md (ensure exact match)
+      "{nameChs}", "{name}", "{gender}", "{age}", "{occupation}", 
+      "{faction}", "{personality}", "{speakingStyle}", "{sampleDialogue}", "{writingStyle}" 
+      // Add any other placeholders used in templates
+  ];
+  const variableRegex = new RegExp(`(${KNOWN_VARIABLES.map(v => v.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')).join('|')})`, 'g');
+
+  // --- Preview Logic --- M
+  // Helper function to highlight variables in text
+  const highlightVariables = (text: string): React.ReactNode => {
+    if (!text) return null;
+    const parts = text.split(variableRegex);
+    return parts.map((part, index) => {
+      if (KNOWN_VARIABLES.includes(part)) {
+        return (
+          <code key={index} className="bg-primary/10 text-primary font-semibold rounded px-1 py-0.5">{part}</code>
+        );
+      }
+      return part;
+    });
+  };
+
+  const assembleSystemPromptPreview = () => {
+    const rules = sections
+      .map((section) => `### ${section.name}\n${section.content}`)
+      .join("\n\n");
+    // Combine and highlight
+    const fullSystemPrompt = `${rules}\n\n${FIXED_OUTPUT_REQUIREMENT}`; 
+    console.log("Assembled System Prompt Preview:", fullSystemPrompt);
+    return highlightVariables(fullSystemPrompt);
+  };
+
+  const assembleUserPromptPreview = () => {
+    let userPrompt = TASK_INFO_TEMPLATE;
+    userPrompt = userPrompt.replace("{TARGET_LANGUAGE}", currentLanguage || "{TARGET_LANGUAGE}");
+    // Highlight after substitution
+    return highlightVariables(userPrompt);
+  };
+  // --- End Preview Logic ---
+
   const handleSave = async () => {
     console.log("Save button clicked!");
 
@@ -550,6 +610,9 @@ export function PromptEditor({ prompt, onSaveSuccess, currentLanguage }: PromptE
     }
   };
 
+  // >>> ADD LOG <<<
+  console.log("[PromptEditor Render] showPreview state:", showPreview);
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -557,7 +620,10 @@ export function PromptEditor({ prompt, onSaveSuccess, currentLanguage }: PromptE
           {prompt ? `Editing: ${prompt.name}` : "Create New Prompt"}
         </h2>
         <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" onClick={() => setShowPreview(!showPreview)}>
+          <Button variant="outline" size="sm" onClick={() => {
+              console.log("[PromptEditor] Toggle Preview Button Clicked. Current showPreview:", showPreview);
+              setShowPreview(!showPreview);
+          }}>
             {showPreview ? "Hide Preview" : "Show Preview"}
           </Button>
           <DropdownMenu>
@@ -645,13 +711,24 @@ export function PromptEditor({ prompt, onSaveSuccess, currentLanguage }: PromptE
           <Card className="mb-4">
             <CardHeader>
               <CardTitle>Complete Prompt Preview</CardTitle>
-              <CardDescription>This is how your assembled prompt will look</CardDescription>
+              <CardDescription>Shows how the prompt components are assembled for the LLM.</CardDescription>
             </CardHeader>
-            <CardContent>
-              <div className="bg-muted p-4 rounded-md">
-                <pre className="whitespace-pre-wrap font-mono text-sm overflow-auto max-h-[400px]">
-                  {assembleCompletePrompt()}
-                </pre>
+            <CardContent className="space-y-4">
+              <div>
+                <h4 className="font-semibold mb-2 text-muted-foreground">System Prompt Preview:</h4>
+                <div className="bg-muted p-4 rounded-md">
+                  <pre className="whitespace-pre-wrap font-mono text-sm overflow-auto max-h-[300px]">
+                    {assembleSystemPromptPreview()}
+                  </pre>
+                </div>
+              </div>
+              <div>
+                <h4 className="font-semibold mb-2 text-muted-foreground">User Prompt Preview (Template):</h4>
+                <div className="bg-muted p-4 rounded-md">
+                  <pre className="whitespace-pre-wrap font-mono text-sm overflow-auto max-h-[300px]">
+                    {assembleUserPromptPreview()}
+                  </pre>
+                </div>
               </div>
             </CardContent>
           </Card>
@@ -926,6 +1003,36 @@ export function PromptEditor({ prompt, onSaveSuccess, currentLanguage }: PromptE
         </DialogContent>
       </Dialog>
       {/* --- End Restore --- */}
+
+      {/* --- ADDED: Read-only display for fixed prompt parts --- M */}
+      <div className="space-y-4">
+         <Card className="bg-secondary/30">
+           <CardHeader className="pb-2">
+             <CardTitle className="text-base">(System Prompt) Output Requirement (Fixed)</CardTitle>
+             <CardDescription className="text-xs">The model will be instructed to follow this output format.</CardDescription>
+           </CardHeader>
+           <CardContent>
+             <pre className="whitespace-pre-wrap font-mono text-sm p-4 rounded-md bg-background/50 overflow-auto max-h-[150px]">
+               {FIXED_OUTPUT_REQUIREMENT}
+             </pre>
+           </CardContent>
+         </Card>
+         <Card className="bg-secondary/30">
+           <CardHeader className="pb-2">
+             <CardTitle className="text-base">(User Prompt) Task Info (Template)</CardTitle>
+             <CardDescription className="text-xs">This structure will be filled with runtime data (source text, TM, etc.).</CardDescription>
+           </CardHeader>
+           <CardContent>
+             <pre className="whitespace-pre-wrap font-mono text-sm p-4 rounded-md bg-background/50 overflow-auto max-h-[250px]">
+               {/* Use highlighting helper here as well */}
+               {highlightVariables(TASK_INFO_TEMPLATE.replace("{TARGET_LANGUAGE}", currentLanguage || "{TARGET_LANGUAGE}"))}
+             </pre>
+           </CardContent>
+         </Card>
+         {/* Optional: Placeholder for Character Info */}
+          {/* <Card> ... Character Info Display ... </Card> */}
+      </div>
+      {/* --- END: Read-only display --- */}
 
     </div>
   )

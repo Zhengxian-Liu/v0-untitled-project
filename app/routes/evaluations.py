@@ -1,7 +1,8 @@
 import logging
+from app.core.prompt_templates import FIXED_OUTPUT_REQUIREMENT_TEMPLATE, TASK_INFO_TEMPLATE
 from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from motor.motor_asyncio import AsyncIOMotorDatabase, AsyncIOMotorCollection
-from typing import List
+from typing import List, Dict, Any
 from bson import ObjectId
 from datetime import datetime
 import anthropic # For specific APIError handling
@@ -20,6 +21,7 @@ from app.services.claude_service import generate_text_with_claude
 from app.routes.auth import get_current_active_user
 from app.models.user import User as UserModel
 from app.services import judge_service
+from app.core.token_utils import estimate_token_count
 
 router = APIRouter()
 EVAL_COLLECTION = "evaluations"
@@ -33,7 +35,8 @@ logger = logging.getLogger(__name__)
 async def run_single_prompt_evaluation_task(
     evaluation_id: PyObjectId,
     prompt_id: PyObjectId, # Specific prompt to run
-    db: AsyncIOMotorDatabase
+    db: AsyncIOMotorDatabase,
+    test_set_data: List[Dict[str, Any]]
 ):
     """Background task to evaluate ONE prompt against the test set."""
     logger.info(f"Starting sub-task for Eval ID: {evaluation_id}, Prompt ID: {prompt_id}")
@@ -41,62 +44,138 @@ async def run_single_prompt_evaluation_task(
     results_collection = db[RESULTS_COLLECTION]
     prompt_collection = db[PROMPT_COLLECTION]
 
-    # 1. Fetch the PARENT evaluation record to get test data
-    eval_record_dict = await eval_collection.find_one({"_id": evaluation_id})
-    if not eval_record_dict:
-        logger.error(f"Sub-task failed: Eval record {evaluation_id} not found.")
-        # Cannot update status easily here, rely on main task logic or timeout
-        return
-    try:
-        eval_record = EvaluationInDB(**eval_record_dict)
-    except Exception as e:
-        logger.error(f"Sub-task failed: Could not parse eval record {evaluation_id}. Error: {e}")
-        return
+    # 1. Use the passed test_set_data
+    # Validate the structure? Assume it's correct for now.
+    # We can use Pydantic's parse_obj_as if needed: test_set_items = parse_obj_as(List[EvaluationRequestData], test_set_data)
 
     # 2. Fetch THIS prompt's text
     prompt_record = await prompt_collection.find_one({"_id": prompt_id})
     if not prompt_record:
         logger.error(f"Sub-task failed: Prompt {prompt_id} not found for eval {evaluation_id}.")
-        # Log error for this prompt, other tasks might continue
         # Store error results?
-        for item in eval_record.test_set_data:
-             error_result = EvaluationResultCreate(
-                 evaluation_id=evaluation_id,
-                 prompt_id=prompt_id,
-                 source_text=item.source_text,
-                 model_output=f"ERROR: Prompt {prompt_id} not found.",
-                 reference_text=item.reference_text
-             )
-             await results_collection.insert_one(error_result.model_dump(exclude={"score", "comment"}))
+        for item_dict in test_set_data:
+            try: # Add try-except for parsing item_dict
+                item = EvaluationRequestData(**item_dict) # Parse dict to model
+                error_result = EvaluationResultCreate(
+                    evaluation_id=evaluation_id,
+                    prompt_id=prompt_id,
+                    source_text=item.source_text,
+                    model_output=f"ERROR: Prompt {prompt_id} not found.",
+                    reference_text=item.reference_text
+                )
+                await results_collection.insert_one(error_result.model_dump(exclude={"score", "comment"}))
+            except Exception as item_parse_err:
+                logger.error(f"Failed to parse item_dict when handling prompt not found: {item_parse_err} - Dict: {item_dict}")
         return # Stop this specific task
-    # --- FIX: Add inline section assembly --- M
-    # Use Prompt model validation to easily access fields
-    prompt_model = Prompt.model_validate(prompt_record)
-    # Simple assembly:
-    prompt_sections = prompt_model.sections if prompt_model.sections else []
-    prompt_text = "\n\n".join([f"### {sec.name}\n{sec.content}" for sec in prompt_sections])
-    # --- End FIX ---
+
+    # --- Assemble System Prompt --- M
+    try:
+        prompt_model = Prompt.model_validate(prompt_record)
+        prompt_sections = prompt_model.sections if prompt_model.sections else []
+        rules_text = "\n\n".join([f"### {sec.name}\n{sec.content}" for sec in prompt_sections])
+        system_prompt = f"{rules_text}\n\n{FIXED_OUTPUT_REQUIREMENT_TEMPLATE}"
+    except Exception as prompt_parse_err:
+        logger.error(f"Failed to parse prompt record or assemble system prompt for {prompt_id}: {prompt_parse_err}", exc_info=True)
+        # Mark all results for this prompt as failed
+        await results_collection.update_many(
+            {"evaluation_id": evaluation_id, "prompt_id": prompt_id},
+            {"$set": {"model_output": f"ERROR: Failed to process prompt {prompt_id}."}}
+        )
+        # Increment completed tasks counter here as we are done processing this prompt (even though it failed)
+        await eval_collection.update_one(
+            {"_id": evaluation_id},
+            {"$inc": {"completed_prompt_tasks": 1}}
+        )
+        return # Stop this task
+    # --- End System Prompt Assembly ---
+
+    # --- Calculate System Prompt Tokens --- M
+    # (Do this once per prompt, outside the item loop)
+    system_token_count = estimate_token_count(system_prompt)
+    # --- End System Prompt Assembly ---
 
     # 3. Iterate test set and call Claude API
     task_has_errors = False
-    for item in eval_record.test_set_data:
+    for index, item_dict in enumerate(test_set_data):
+        result_id = None # Initialize result_id for potential error logging
         model_output = None
         try:
-            model_output = await generate_text_with_claude(prompt_text, item.source_text)
+            item = EvaluationRequestData(**item_dict) # Parse dict to model
+            result_id = item_dict.get("_id") # Assuming results were pre-created and have IDs
+
+            # --- Get Contextual Data --- M
+            previous_context = test_set_data[index - 1].get("source_text", "N/A") if index > 0 else "N/A"
+            following_context = test_set_data[index + 1].get("source_text", "N/A") if index < len(test_set_data) - 1 else "N/A"
+            additional_instructions = item.additional_instructions if item.additional_instructions else "N/A"
+            # --- End Contextual Data ---
+
+            # --- Assemble User Prompt for this item --- M
+            user_prompt = TASK_INFO_TEMPLATE
+            user_prompt = user_prompt.replace("{SOURCE_TEXT}", item.source_text)
+            user_prompt = user_prompt.replace("{PREVIOUS_CONTEXT}", previous_context)
+            user_prompt = user_prompt.replace("{FOLLOWING_CONTEXT}", following_context)
+            user_prompt = user_prompt.replace("{TARGET_LANGUAGE}", prompt_model.language or "Unknown")
+            user_prompt = user_prompt.replace("{TERMINOLOGY}", "[]") # TODO
+            user_prompt = user_prompt.replace("{SIMILAR_TRANSLATIONS}", "[]") # TODO
+            user_prompt = user_prompt.replace("{ADDITIONAL_INSTRUCTIONS}", additional_instructions)
+            # --- End User Prompt Assembly ---
+
+            # --- Calculate User/Total Tokens --- M
+            user_token_count = estimate_token_count(user_prompt)
+            total_token_count = system_token_count + user_token_count
+            # --- End Token Calculation ---
+
+            # --- ADDED: Log full assembled prompts for debugging --- M
+            logger.debug(f"--- System Prompt for Eval {evaluation_id}, Prompt {prompt_id} ({system_token_count} tokens) ---\n{system_prompt}\n--------------------")
+            logger.debug(f"--- User Prompt for Eval {evaluation_id}, Prompt {prompt_id}, Source '{item.source_text[:30]}...' ({user_token_count} tokens) ---\n{user_prompt}\n--------------------")
+            # --- End Log --- M
+
+            # Call Claude service with separate system and user prompts
+            model_output_raw = await generate_text_with_claude(
+                prompt_text=system_prompt, 
+                source_text=user_prompt
+            )
+
+            # --- Extract text from <translated_text> tags --- M
+            start_tag = "<translated_text>"
+            end_tag = "</translated_text>"
+            start_index = model_output_raw.find(start_tag)
+            end_index = model_output_raw.find(end_tag)
+            if start_index != -1 and end_index != -1:
+                model_output = model_output_raw[start_index + len(start_tag):end_index].strip()
+            else:
+                logger.warning(f"Could not find {start_tag}...{end_tag} in output for eval {evaluation_id}, prompt {prompt_id}, source '{item.source_text[:20]}...'. Using raw output.")
+                model_output = model_output_raw # Fallback to raw output
+            # --- End Extraction ---
+
             logger.debug(f"Eval {evaluation_id}, Prompt {prompt_id}: Generated output for source: '{item.source_text[:30]}...'")
-        except Exception as e: # Catch any exception from service
-            logger.error(f"Eval {evaluation_id}, Prompt {prompt_id}: Claude API error for source '{item.source_text[:30]}...': {e}")
+        except Exception as e: # Catch any exception from service or prompt assembly
+            # FIX: Safely log error without assuming 'item' exists yet
+            source_preview = item_dict.get("source_text")[:30] if isinstance(item_dict, dict) else "<unknown source>"
+            logger.error(f"Eval {evaluation_id}, Prompt {prompt_id}: Claude API or processing error for source '{source_preview}...': {e}", exc_info=True)
             task_has_errors = True
             model_output = f"ERROR: {e}"
 
         # 4. Store the result with prompt_id
+        # NOTE: This assumes results are created upfront and we UPDATE them.
+        # If results are created here, the logic needs adjustment.
+        # We need the result_id to update the correct document.
+        
+        # TEMPORARY: Assuming results are created here for now. Find existing or create new?
+        # Let's stick to the original logic: Create result here.
         result_data = EvaluationResultCreate(
             evaluation_id=evaluation_id,
             prompt_id=prompt_id, # Store which prompt generated this
             source_text=item.source_text,
             model_output=model_output,
-            reference_text=item.reference_text
+            reference_text=item.reference_text,
+            # --- Store Sent Prompts and Tokens --- M
+            sent_system_prompt=system_prompt,
+            sent_user_prompt=user_prompt,
+            prompt_token_count=total_token_count
+            # --- End Store ---
         )
+        # Perform insert instead of update
         await results_collection.insert_one(result_data.model_dump(exclude={"score", "comment"}))
 
     # --- Status Update (Handled by coordinating task/endpoint) ---
@@ -269,7 +348,9 @@ async def create_evaluation(
 
     # 3. Schedule background task for EACH prompt
     for prompt_id in prompt_ids:
-        background_tasks.add_task(run_single_prompt_evaluation_task, created_eval_id, prompt_id, db)
+        # FIX: Pass list of dicts, not list of models, to background task
+        test_set_data_dicts = [item.model_dump() for item in eval_request.test_set_data]
+        background_tasks.add_task(run_single_prompt_evaluation_task, created_eval_id, prompt_id, db, test_set_data_dicts)
     logger.info(f"Scheduled {len(prompt_ids)} background sub-tasks for Evaluation ID: {created_eval_id}")
 
     # --- Set status to running (after scheduling) --- M

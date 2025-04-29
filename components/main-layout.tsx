@@ -73,6 +73,8 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
                   />
                 </TabsContent>
                 <TabsContent value="editor" className="mt-6">
+                  {/* LOG: Check if editor tab content renders */}
+                  {(() => { console.log("Editor Tab Content Rendered"); return null; })()}
                   <PromptEditor
                     prompt={selectedPrompt}
                     onSaveSuccess={triggerLibraryRefresh}

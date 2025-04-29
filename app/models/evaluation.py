@@ -23,6 +23,11 @@ class EvaluationResultBase(BaseModel):
     llm_judge_score: Optional[float] = Field(None, description="Score assigned by the LLM judge.")
     llm_judge_rationale: Optional[str] = Field(None, description="Rationale provided by the LLM judge.")
     llm_judge_model_id: Optional[str] = Field(None, description="Model ID used for LLM judging.")
+    # --- Sent Prompt Fields ---
+    sent_system_prompt: Optional[str] = Field(None, description="The exact system prompt sent to the LLM.")
+    sent_user_prompt: Optional[str] = Field(None, description="The exact user prompt sent to the LLM.")
+    prompt_token_count: Optional[int] = Field(None, description="Approximate token count of the sent prompt.")
+    # --- End Sent Prompt Fields ---
     # --- End LLM Judge Fields ---
 
 class EvaluationResultCreate(EvaluationResultBase):
@@ -82,7 +87,7 @@ class EvaluationRequestData(BaseModel):
     """Structure for individual items in the test set data."""
     source_text: str
     reference_text: Optional[str] = None
-    # Add other optional fields like text_id, extra_info if needed from PRD FR-EV-03
+    additional_instructions: Optional[str] = Field(None, description="Specific instructions for this test item.")
     # text_id: Optional[str] = None
     # extra_info: Optional[dict] = None
 

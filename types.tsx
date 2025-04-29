@@ -83,6 +83,11 @@ export type EvaluationResult = {
   llm_judge_score?: number | null;
   llm_judge_rationale?: string | null;
   llm_judge_model_id?: string | null;
+  // --- Sent Prompt Fields --- M
+  sent_system_prompt?: string | null;
+  sent_user_prompt?: string | null;
+  prompt_token_count?: number | null;
+  // --- End Sent Prompt Fields ---
   // --- End Add --- M
 }
 
@@ -97,6 +102,7 @@ export type EvaluationSessionConfigColumn = {
 export type EvaluationSessionTestItem = {
   sourceText: string;
   referenceText: string | null;
+  additional_instructions?: string | null;
 }
 
 export type EvaluationSessionConfig = {

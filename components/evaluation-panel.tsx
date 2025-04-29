@@ -70,6 +70,7 @@ interface TestRow {
   id: string; // Frontend temporary ID
   sourceText: string;
   referenceText: string;
+  additional_instructions: string; // ADDED
 }
 
 // --- Define types locally if not imported --- M
@@ -97,7 +98,6 @@ export function EvaluationPanel({ currentLanguage }: EvaluationPanelProps) {
   // --- End Update ---
 
   // State for results
-  const [results, setResults] = useState<ResultItem[]>([])
   const [evaluationResults, setEvaluationResults] = useState<EvaluationResult[]>([])
   const [currentEvaluationId, setCurrentEvaluationId] = useState<string | null>(null)
   const [evaluationStatus, setEvaluationStatus] = useState<string | null>(null)
@@ -106,6 +106,12 @@ export function EvaluationPanel({ currentLanguage }: EvaluationPanelProps) {
 
   // ADDED: State to track if completion toast was shown
   const [isCompletionToastShown, setIsCompletionToastShown] = useState(false);
+
+  // ADDED: State for showing sent prompts
+  const [showSentPrompts, setShowSentPrompts] = useState(false);
+
+  // ADDED: State for showing additional instructions column
+  const [showInstructionsColumn, setShowInstructionsColumn] = useState(true);
 
   // Projects data
   const projects = [
@@ -122,7 +128,7 @@ export function EvaluationPanel({ currentLanguage }: EvaluationPanelProps) {
 
   // --- State for Editable Test Rows --- M
   const [testRows, setTestRows] = useState<TestRow[]>([
-      { id: Date.now().toString(), sourceText: "", referenceText: "" }
+      { id: Date.now().toString(), sourceText: "", referenceText: "", additional_instructions: "" }
   ]);
   // --- End State ---
 
@@ -498,7 +504,8 @@ export function EvaluationPanel({ currentLanguage }: EvaluationPanelProps) {
 
     let testSetData: EvaluationRequestData[] = testRows.map(row => ({
         source_text: row.sourceText,
-        reference_text: row.referenceText.trim() === "" ? null : row.referenceText
+        reference_text: row.referenceText.trim() === "" ? null : row.referenceText,
+        additional_instructions: row.additional_instructions.trim() === "" ? null : row.additional_instructions
     }));
     testSetData = testSetData.filter(item => item.source_text.trim() !== "");
 
@@ -557,7 +564,7 @@ export function EvaluationPanel({ currentLanguage }: EvaluationPanelProps) {
 
   // Handle adding a test row
   const handleAddTestRow = () => {
-    setTestRows([...testRows, { id: Date.now().toString(), sourceText: "", referenceText: "" }]);
+    setTestRows([...testRows, { id: Date.now().toString(), sourceText: "", referenceText: "", additional_instructions: "" }]);
   };
 
   const handleDeleteTestRow = (id: string) => {
@@ -709,6 +716,31 @@ export function EvaluationPanel({ currentLanguage }: EvaluationPanelProps) {
               Show Reference Translations
             </Label>
           </div>
+
+          {/* ADDED: Show Sent Prompts Toggle */}
+          <div className="flex items-center space-x-2">
+            <Checkbox
+              id="show-sent-prompts"
+              checked={showSentPrompts}
+              onCheckedChange={(checked) => setShowSentPrompts(!!checked)}
+            />
+            <Label htmlFor="show-sent-prompts" className="text-sm whitespace-nowrap">
+              Show Sent Prompts
+            </Label>
+          </div>
+
+          {/* ADDED: Show Instructions Column Toggle */}
+          <div className="flex items-center space-x-2">
+            <Checkbox
+              id="show-instructions-col"
+              checked={showInstructionsColumn}
+              onCheckedChange={(checked) => setShowInstructionsColumn(!!checked)}
+            />
+            <Label htmlFor="show-instructions-col" className="text-sm whitespace-nowrap">
+              Show Instructions Column
+            </Label>
+          </div>
+
         </div>
 
         <div className="flex items-center gap-2">
@@ -765,6 +797,8 @@ export function EvaluationPanel({ currentLanguage }: EvaluationPanelProps) {
                 {/* Test Set Columns */}
                 <TableHead className="w-[40%] min-w-[200px]">Source Text</TableHead>
                 {showIdealOutputs && <TableHead className="w-[40%] min-w-[200px]">Reference Translation</TableHead>}
+                {/* ADDED: Additional Instructions Column Header */}
+                <TableHead className="w-[20%] min-w-[150px]">Additional Instructions</TableHead>
 
                 {/* Prompt/Model Columns */}
                 {columns.map((column) => (
@@ -841,21 +875,8 @@ export function EvaluationPanel({ currentLanguage }: EvaluationPanelProps) {
                         </div>
                       </div>
 
-                      {/* Model Select (Placeholder) */}
-                      <div className="mt-1">
-                        <Select value={column.modelId} onValueChange={(value) => handleChangeModel(column.id, value)}>
-                          <SelectTrigger className="h-8 w-full">
-                             <SelectValue placeholder="Select model" />
-                          </SelectTrigger>
-                          <SelectContent>
-                             {mockModels.map((model) => (
-                               <SelectItem key={model.id} value={model.id}>
-                                 {model.name}
-                               </SelectItem>
-                             ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
+                      {/* TODO: Model Select (Placeholder - UI Removed Temporarily) */}
+                      {/* <div className=\"mt-1\"> ... Select component using mockModels ... </div> */}
 
                       {/* Prompt Preview */}
                       {column.showPrompt && (
@@ -902,6 +923,16 @@ export function EvaluationPanel({ currentLanguage }: EvaluationPanelProps) {
                     </TableCell>
                   )}
 
+                  {/* Additional Instructions Input Cell */}
+                  <TableCell className="align-top p-1">
+                     <Textarea
+                       placeholder={`Instructions ${index + 1}`}
+                       value={row.additional_instructions}
+                       onChange={(e) => handleTestRowChange(row.id, 'additional_instructions', e.target.value)}
+                       className="min-h-[80px] h-auto resize-y border-none focus-visible:ring-1 focus-visible:ring-ring p-1 text-xs" // Smaller text?
+                     />
+                  </TableCell>
+
                   {/* Prompt Output/Result Cells */}
                   {columns.map((column) => {
                     const cellId = `${row.id}-${column.id}`;
@@ -926,6 +957,32 @@ export function EvaluationPanel({ currentLanguage }: EvaluationPanelProps) {
                           </div>
                         ) : output ? (
                            <div className="space-y-2">
+                              {/* --- ADDED: Sent Prompt Display (Conditional) --- */}
+                              {showSentPrompts && (
+                                  <ScrollArea className="h-[100px] w-full rounded-md border bg-blue-500/10 p-2 mb-2">
+                                     <p className="text-xs font-medium text-muted-foreground mb-1">Sent Prompt (Tokens: {output.prompt_token_count ?? 'N/A'}):</p>
+                                     <pre className="text-xs font-mono whitespace-pre-wrap">
+                                         {/* Show System Prompt */}
+                                         {output.sent_system_prompt ? (
+                                             `--- SYSTEM PROMPT ---\n${output.sent_system_prompt}`
+                                         ) : (
+                                             "(System prompt not stored)"
+                                         )}
+                                         {
+                                         /* Add separator if both exist */
+                                         output.sent_system_prompt && output.sent_user_prompt ? `\n\n--- USER PROMPT ---\n` : ''
+                                         }
+                                         {/* Show User Prompt */}
+                                         {output.sent_user_prompt ? (
+                                             output.sent_system_prompt ? output.sent_user_prompt : `--- USER PROMPT ---\n${output.sent_user_prompt}`
+                                         ) : (
+                                             output.sent_system_prompt ? '' : "(User prompt not stored)"
+                                         )}
+                                     </pre>
+                                  </ScrollArea>
+                              )}
+                              {/* --- END: Sent Prompt Display --- */}
+
                               {/* Model Output */}
                               <p>{output.model_output || "(No output)"}</p>
 
@@ -1013,7 +1070,8 @@ export function EvaluationPanel({ currentLanguage }: EvaluationPanelProps) {
                {/* Row for "No Test Rows" message */}
               {testRows.length === 0 && (
                     <TableRow>
-                        <TableCell colSpan={columns.length + (showIdealOutputs ? 2 : 1) + 1} className="text-center text-muted-foreground py-4">
+                        {/* Adjust colspan for new column */}
+                        <TableCell colSpan={columns.length + (showIdealOutputs ? 3 : 2) + 1} className="text-center text-muted-foreground py-4">
                             Add test rows below to start an evaluation.
                         </TableCell>
                     </TableRow>

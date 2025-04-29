@@ -79,6 +79,11 @@ export type EvaluationResult = {
   score: number | null;
   comment: string | null;
   created_at: string;
+  // --- Add LLM Judge Fields --- M
+  llm_judge_score?: number | null;
+  llm_judge_rationale?: string | null;
+  llm_judge_model_id?: string | null;
+  // --- End Add --- M
 }
 
 // For representing saved evaluation sessions
@@ -133,11 +138,16 @@ export type Evaluation = {
   prompt_ids: string[]; // List of prompt version IDs used
   test_set_name: string | null;
   status: string; // e.g., pending, running, completed, failed
+  user_id?: string | null; // Add user_id (optional for type safety)
   created_at: string;
   completed_at: string | null;
   total_prompt_tasks?: number | null; // Optional counters
   completed_prompt_tasks?: number | null;
   // Does NOT include test_set_data or results by default
+  // --- Add LLM Judge Status Fields --- M
+  judge_status?: string | null; // e.g., not_started, pending, completed, failed
+  judged_at?: string | null;
+  // --- End Add --- M
 }
 // --- End NEW Type ---
 

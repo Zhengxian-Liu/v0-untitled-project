@@ -41,10 +41,10 @@ async def connect_to_mongo():
             mongo_db.client = None
             mongo_db.db = None
             if attempt < MAX_RETRIES - 1:
-                 logger.info(f"Retrying in {RETRY_DELAY_SECONDS} seconds...")
-                 await asyncio.sleep(RETRY_DELAY_SECONDS)
+                logger.info(f"Retrying in {RETRY_DELAY_SECONDS} seconds...")
+                await asyncio.sleep(RETRY_DELAY_SECONDS)
             else:
-                 logger.error("Max MongoDB connection retries reached. Connection failed.")
+                logger.error("Max MongoDB connection retries reached. Connection failed.")
 
 
 async def close_mongo_connection():

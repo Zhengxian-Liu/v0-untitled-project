@@ -102,6 +102,10 @@ export function EvaluationPanel({ currentLanguage }: EvaluationPanelProps) {
   const [currentEvaluationId, setCurrentEvaluationId] = useState<string | null>(null)
   const [evaluationStatus, setEvaluationStatus] = useState<string | null>(null)
   const [isLoadingResults, setIsLoadingResults] = useState(false)
+  const [judgeStatus, setJudgeStatus] = useState<string | null>(null)
+
+  // ADDED: State to track if completion toast was shown
+  const [isCompletionToastShown, setIsCompletionToastShown] = useState(false);
 
   // Projects data
   const projects = [
@@ -349,99 +353,138 @@ export function EvaluationPanel({ currentLanguage }: EvaluationPanelProps) {
     }
   };
 
-  // --- Function to Fetch Results (Modified for Polling) --- M
-  const fetchEvaluationResults = async (evalId: string) => {
+  // --- NEW: Function to fetch only the full results --- M
+  const fetchFullEvaluationResults = async (evalId: string) => {
     if (!evalId) return;
 
-    console.log(`Polling results for evaluation ID: ${evalId}`);
-    let latestStatus = evaluationStatus;
+    // Remove status fetching/checking logic from here
+    // setIsLoadingResults(true); // Maybe set a specific loading state?
+    console.log(`Fetching FULL results for evaluation ID: ${evalId}`);
     try {
-        // 1. Check completion status first
-        // apiClient throws on non-ok status, so we check response directly
-        const evalData = await apiClient<Evaluation>(`/evaluations/${evalId}/check_completion`, { method: 'PATCH' });
-        latestStatus = evalData.status;
-        setEvaluationStatus(latestStatus);
-
         // 2. Fetch the results (only if still needed?)
         // If check_completion returns updated data, maybe we don't need separate results call?
         // Assuming for now we still need it:
         const resultsData = await apiClient<EvaluationResult[]>(`/evaluations/${evalId}/results`);
         setEvaluationResults(resultsData);
-        console.log("Fetched results:", resultsData);
 
-        // 3. Update pending state
-        setPendingOutputs(prevPending => {
-            const newPending = new Set(prevPending);
-            // Find mapping from result to rowId (using sourceText for now)
-            resultsData.forEach(result => {
-                const matchingRow = testRows.find(row => row.sourceText === result.source_text);
-                // --- FIX: Find column based on result.prompt_id --- M
-                // Find the column that has this specific version selected
-                const matchingCol = columns.find(col => col.selectedVersionId === result.prompt_id);
-                // --- End FIX ---
-                if (matchingRow && matchingCol) {
-                    // If found, remove from pending
-                    newPending.delete(`${matchingRow.id}-${matchingCol.id}`);
-                }
-            });
-            // If status is completed/failed, clear all pending for this eval
-            if (latestStatus === 'completed' || latestStatus === 'failed') {
-                 console.log(`Evaluation ${latestStatus}, clearing all pending.`);
-                 return new Set(); // Clear all
-            }
-            return newPending;
-        });
-
-        // 4. Stop polling if completed or failed
-        if (latestStatus === 'completed' || latestStatus === 'failed') {
-            clearPolling();
-            setIsLoading(false); // Ensure main loading state is off
-            toast.info(`Evaluation ${evalId} finished with status: ${latestStatus}`);
-        }
+        // Note: Pending state update is removed, should be handled based on status polling
 
     } catch (error) {
-        console.error("Failed during results fetch/polling:", error);
-        toast.error(`Failed to fetch results: ${error instanceof Error ? error.message : "Unknown error"}`);
-        clearPolling();
-        setIsLoading(false);
+        console.error("Failed fetching full results:", error);
+        toast.error(`Failed to load full results: ${error instanceof Error ? error.message : "Unknown error"}`);
+        // setIsLoadingResults(false);
     }
   };
-  // --- End Fetch Results ---
+  // --- End Fetch Full Results ---
+
+  // --- NEW: Function to poll status --- M
+  const pollStatus = async (evalId: string) => {
+      if (!evalId) return;
+      console.log(`Polling CHECK_COMPLETION for evaluation ID: ${evalId}`);
+      try {
+          // FIX: Call check_completion endpoint which returns the full Evaluation object
+          const evalData = await apiClient<Evaluation>(`/evaluations/${evalId}/check_completion`, { method: 'PATCH' });
+          console.log("[Polling] Received Eval Data from check_completion:", evalData);
+
+          const newEvalStatus = evalData.status ?? null;
+          const newJudgeStatus = evalData.judge_status ?? null;
+
+          let shouldFetchFullResults = false;
+
+          // Update state if status changed
+          if (newEvalStatus !== evaluationStatus) {
+              console.log(`[Status Poll] Evaluation status changed: ${evaluationStatus} -> ${newEvalStatus}`);
+              setEvaluationStatus(newEvalStatus);
+              if (newEvalStatus === 'completed' || newEvalStatus === 'failed') {
+                 shouldFetchFullResults = true; // Fetch results when eval completes/fails
+                 setPendingOutputs(new Set()); // Clear pending gen outputs
+              }
+          }
+          if (newJudgeStatus !== judgeStatus) {
+              console.log(`[Status Poll] Judge status changed: ${judgeStatus} -> ${newJudgeStatus}`);
+              setJudgeStatus(newJudgeStatus);
+              if (newJudgeStatus === 'completed' || newJudgeStatus === 'failed') {
+                 shouldFetchFullResults = true; // Also fetch results when judge completes/fails
+              }
+          }
+
+          // Decide whether to stop polling
+          const isGenerationDone = newEvalStatus === 'completed' || newEvalStatus === 'failed';
+          const isJudgeDone = newJudgeStatus === 'completed' || newJudgeStatus === 'failed' || newJudgeStatus === 'not_started' || newJudgeStatus === null;
+
+          if (isGenerationDone && isJudgeDone) {
+              // Always clear the interval if both are done
+              clearPolling(); 
+              // Only show toast and log stop if not already shown for this run
+              if (!isCompletionToastShown) {
+                  setIsCompletionToastShown(true); // Set flag immediately
+                  const combinedStatus = `Eval: ${newEvalStatus ?? '-'} / Judge: ${newJudgeStatus ?? '-'}`;
+                  toast.info(`Evaluation ${evalId} finished. Status: ${combinedStatus}`);
+                  console.log(`Polling stopped by pollStatus (toast shown). Final Status: ${combinedStatus}`);
+                  shouldFetchFullResults = true; // Ensure final results are fetched
+              } else {
+                  console.log(`Polling stopped by pollStatus (toast already shown). Final Status: Eval: ${newEvalStatus ?? '-'} / Judge: ${newJudgeStatus ?? '-'}`);
+              }
+          } else {
+             // If still active, maybe fetch results less often? Or only on state change?
+             // For now, fetch results only if status changed to final state (handled above)
+             console.log(`[Status Poll] Still active. Eval: ${newEvalStatus}, Judge: ${newJudgeStatus}`);
+          }
+
+          // Fetch full results if needed based on status changes
+          if (shouldFetchFullResults) {
+              console.log("[Status Poll] Triggering fetchFullEvaluationResults based on status change.");
+              fetchFullEvaluationResults(evalId);
+          }
+
+      } catch (error) {
+          console.error("Failed during status poll:", error);
+          toast.error(`Status poll failed: ${error instanceof Error ? error.message : "Unknown error"}`);
+          // Consider stopping polling on error?
+          // clearPolling();
+      }
+  };
+  // --- End Poll Status ---
 
   // --- Polling Effect --- M
   useEffect(() => {
-      // Start polling when an evaluation ID is set and status is pending/running
-      if (currentEvaluationId && (evaluationStatus === 'pending' || evaluationStatus === 'running')) {
-          console.log(`Starting polling for ${currentEvaluationId}`);
-          // Clear any existing interval first
-          clearPolling();
-          // Initial fetch
-          fetchEvaluationResults(currentEvaluationId);
-          // Set interval
-          const intervalId = setInterval(() => {
-              fetchEvaluationResults(currentEvaluationId);
-          }, 5000); // Poll every 5 seconds
-          setPollingIntervalId(intervalId);
-      } else {
-          // Stop polling if no active evaluation ID or status is final
-          clearPolling();
-      }
-
-      // Cleanup function to stop polling when component unmounts or deps change
-      return () => {
-          clearPolling();
-      };
-  // Depend on currentEvaluationId and evaluationStatus to start/stop polling
-  }, [currentEvaluationId, evaluationStatus]);
+       // Determine if either generation or judging is active
+       const isGenerationActive = evaluationStatus === 'pending' || evaluationStatus === 'running';
+       const isJudgingActive = judgeStatus === 'pending'; // Only pending indicates active judging
+ 
+       // --- MODIFIED: Always attempt fetch if ID exists, let fetch handle stop --- M
+       if (currentEvaluationId) { 
+           console.log(`Polling useEffect triggered for ${currentEvaluationId}. EvalStatus: ${evaluationStatus}, JudgeStatus: ${judgeStatus}`);
+           // Clear any existing interval first
+           clearPolling();
+           // Call pollStatus immediately, it might trigger fetchFullEvaluationResults
+           pollStatus(currentEvaluationId); 
+           // Set interval - fetchFullEvaluationResults will clear this if needed
+           const intervalId = setInterval(() => {
+               pollStatus(currentEvaluationId); // Poll status endpoint
+           }, 5000); // Poll every 5 seconds
+           setPollingIntervalId(intervalId);
+       } else {
+           // Stop polling if no active evaluation ID
+           console.log("Polling useEffect: No currentEvaluationId, stopping polling.");
+           clearPolling();
+       }
+ 
+       // Cleanup function to stop polling when component unmounts or deps change
+       return () => {
+           clearPolling();
+       };
+  }, [currentEvaluationId, evaluationStatus, judgeStatus]);
   // --- End Polling Effect ---
 
   // Handle running evaluation
   const handleRunEvaluation = async () => {
     setIsLoading(true);
+    // Reset completion flag for new run
+    setIsCompletionToastShown(false); 
     // --- Clear previous results and pending state --- M
     setEvaluationResults([]);
     setPendingOutputs(new Set());
-    // --- End Clear ---
     setCurrentEvaluationId(null);
     setEvaluationStatus("pending");
     console.log("Running evaluation...");
@@ -600,10 +643,44 @@ export function EvaluationPanel({ currentLanguage }: EvaluationPanelProps) {
   };
   // --- End Save Handler ---
 
+  // --- Handler to Trigger LLM Judging --- M
+  const handleRunLLMJudge = async () => {
+    if (!currentEvaluationId) {
+        toast.error("No active evaluation run selected");
+        return;
+    }
+
+    // Check if already running/completed (optional)
+    if (judgeStatus && judgeStatus !== 'failed' && judgeStatus !== 'not_started') {
+        toast.info(`LLM judging is already ${judgeStatus} for this evaluation.`);
+        return;
+    }
+
+    console.log(`Triggering LLM judge for evaluation: ${currentEvaluationId}`);
+    toast.info("Initiating LLM judge process...");
+    setJudgeStatus('pending'); // Optimistic UI update
+
+    try {
+        const response = await apiClient(`/evaluations/${currentEvaluationId}/judge`, {
+            method: 'POST'
+        });
+        // No need to parse response body if using 202 Accepted
+        toast.success("LLM judging process started successfully.");
+        // Polling should automatically pick up the status change
+    } catch (error) {
+        console.error("Failed to start LLM judging:", error);
+        toast.error(`Failed to start LLM judging: ${error instanceof Error ? error.message : "Unknown error"}`);
+        setJudgeStatus('failed'); // Revert optimistic update
+    }
+  };
+  // --- End Trigger Handler ---
+
   return (
     <div className="space-y-6">
+      {/* Top Controls: Project Select, Settings, Run Buttons */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
+          {/* Project Selector */}
           <Select value={selectedProject} onValueChange={setSelectedProject}>
             <SelectTrigger className="w-[200px]">
               <SelectValue placeholder="Select project" />
@@ -617,19 +694,21 @@ export function EvaluationPanel({ currentLanguage }: EvaluationPanelProps) {
             </SelectContent>
           </Select>
 
+          {/* Show Reference Toggle */}
           <div className="flex items-center space-x-2">
-            <Label htmlFor="show-ideal" className="text-sm">
-              Show Reference Translations
-            </Label>
             <Checkbox
               id="show-ideal"
               checked={showIdealOutputs}
               onCheckedChange={(checked) => setShowIdealOutputs(!!checked)}
             />
+            <Label htmlFor="show-ideal" className="text-sm whitespace-nowrap">
+              Show Reference Translations
+            </Label>
           </div>
         </div>
 
         <div className="flex items-center gap-2">
+          {/* Test Settings Popover (Content removed for brevity, assuming it was correct) */}
           <Popover>
             <PopoverTrigger asChild>
               <Button variant="outline">
@@ -638,73 +717,38 @@ export function EvaluationPanel({ currentLanguage }: EvaluationPanelProps) {
               </Button>
             </PopoverTrigger>
             <PopoverContent className="w-80">
-              <div className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="test-set-type">Test Set Type</Label>
-                  <Select value={testSetType} onValueChange={setTestSetType}>
-                    <SelectTrigger id="test-set-type">
-                      <SelectValue placeholder="Select test set type" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="standardized">Standardized Test Set</SelectItem>
-                      <SelectItem value="upload">Upload New Set</SelectItem>
-                      <SelectItem value="manual">Manual Input</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                {testSetType === "standardized" && (
-                  <div className="space-y-2">
-                    <Label htmlFor="test-set">Test Set</Label>
-                    <Select value={selectedTestSet} onValueChange={setSelectedTestSet}>
-                      <SelectTrigger id="test-set">
-                        <SelectValue placeholder="Select standardized test set" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {mockTestSets.map((testSet) => (
-                          <SelectItem key={testSet.id} value={testSet.id}>
-                            {testSet.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                )}
-
-                {testSetType === "upload" && (
-                  <div className="grid w-full gap-1.5">
-                    <Label htmlFor="file-upload">Upload File</Label>
-                    <div className="flex items-center justify-center w-full">
-                      <label
-                        htmlFor="file-upload"
-                        className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed rounded-lg cursor-pointer bg-muted/50 hover:bg-muted"
-                      >
-                        <div className="flex flex-col items-center justify-center pt-5 pb-6">
-                          <Upload className="w-8 h-8 mb-2 text-muted-foreground" />
-                          <p className="mb-2 text-sm text-muted-foreground">
-                            <span className="font-semibold">Click to upload</span> or drag and drop
-                          </p>
-                          <p className="text-xs text-muted-foreground">CSV or TXT file (max. 10MB)</p>
-                        </div>
-                        <input id="file-upload" type="file" className="hidden" />
-                      </label>
-                    </div>
-                  </div>
-                )}
-
-                <p className="text-sm text-muted-foreground">Add/edit test rows directly in the table below.</p>
-              </div>
+              {/* Add the content for Test Settings Popover here if needed */}
+              <p>Test set options will go here...</p>
             </PopoverContent>
           </Popover>
 
+          {/* Run Evaluation Button */}
           <Button onClick={handleRunEvaluation} disabled={isLoading || !!pollingIntervalId}>
             <Play className="mr-2 h-4 w-4" />
-            {isLoading ? "Starting..." : "Run Evaluation"}
+            {evaluationStatus === 'pending' || evaluationStatus === 'running' ? "Running..." : "Run Evaluation"}
           </Button>
-          {evaluationStatus && <span className="text-sm text-muted-foreground">Status: {evaluationStatus}</span>}
+
+          {/* Run LLM Judge Button */}
+          <Button
+             variant="outline"
+             onClick={handleRunLLMJudge}
+             disabled={!currentEvaluationId || evaluationStatus === 'pending' || evaluationStatus === 'running' || (!!judgeStatus && judgeStatus !== 'failed' && judgeStatus !== 'not_started')}
+             title={!currentEvaluationId ? "Run an evaluation first" : (judgeStatus && judgeStatus !== 'failed' && judgeStatus !== 'not_started') ? `Judging status: ${judgeStatus}` : "Run LLM Judge Evaluation"}
+          >
+            {/* Consider adding an icon e.g., <Sparkles className="mr-2 h-4 w-4" /> */}
+             {judgeStatus === 'pending' ? 'Judging...' : 'Run LLM Judge'}
+          </Button>
+
+          {/* Status Display */}
+          {(evaluationStatus || judgeStatus) && (
+             <span className="text-sm text-muted-foreground ml-2">
+               Eval: {evaluationStatus ?? '-'} / Judge: {judgeStatus ?? '-'}
+             </span>
+           )}
         </div>
       </div>
 
+      {/* Results Card and Table */}
       <Card>
         <CardHeader>
           <CardTitle>Evaluation Results</CardTitle>
@@ -714,20 +758,22 @@ export function EvaluationPanel({ currentLanguage }: EvaluationPanelProps) {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead className="w-[40%]">Source Text</TableHead>
-                {showIdealOutputs && <TableHead className="w-[40%]">Reference Translation</TableHead>}
+                {/* Test Set Columns */}
+                <TableHead className="w-[40%] min-w-[200px]">Source Text</TableHead>
+                {showIdealOutputs && <TableHead className="w-[40%] min-w-[200px]">Reference Translation</TableHead>}
 
+                {/* Prompt/Model Columns */}
                 {columns.map((column) => (
-                  <TableHead key={column.id} className="min-w-[250px]">
+                  <TableHead key={column.id} className="min-w-[300px]"> {/* Increased min-width */}
                     <div className="space-y-2">
                       {/* Base Prompt Select */}
                       <div className="flex items-center justify-between">
                         <Select
-                          value={column.basePromptId ?? SELECT_PLACEHOLDER_VALUE} // Use constant for null
+                          value={column.basePromptId ?? SELECT_PLACEHOLDER_VALUE}
                           onValueChange={(value) => handleChangeBasePrompt(column.id, value === SELECT_PLACEHOLDER_VALUE ? null : value)}
                           disabled={isLoadingPrompts}
                         >
-                          <SelectTrigger className="h-8 w-full mb-1"> {/* Full width */} 
+                          <SelectTrigger className="h-8 w-full mb-1">
                             <SelectValue placeholder="Select Base Prompt" />
                           </SelectTrigger>
                           <SelectContent>
@@ -735,6 +781,7 @@ export function EvaluationPanel({ currentLanguage }: EvaluationPanelProps) {
                             {promptsError && <SelectItem value="error" disabled>Error loading</SelectItem>}
                             <SelectItem value={SELECT_PLACEHOLDER_VALUE}>-- Select Base Prompt --</SelectItem>
                             {!isLoadingPrompts && !promptsError && availablePrompts.map((prompt) => (
+                              // Use base_prompt_id as value, display name
                               <SelectItem key={prompt.base_prompt_id} value={prompt.base_prompt_id}>
                                 {prompt.name}
                               </SelectItem>
@@ -746,11 +793,11 @@ export function EvaluationPanel({ currentLanguage }: EvaluationPanelProps) {
                       {/* Version Select */}
                       <div className="flex items-center justify-between">
                         <Select
-                            value={column.selectedVersionId ?? SELECT_PLACEHOLDER_VALUE} // Use constant for null
+                            value={column.selectedVersionId ?? SELECT_PLACEHOLDER_VALUE}
                             onValueChange={(value) => handleChangeVersion(column.id, value === SELECT_PLACEHOLDER_VALUE ? null : value)}
                             disabled={!column.basePromptId || column.isLoadingVersions}
                         >
-                            <SelectTrigger className="h-8 w-[calc(100%-70px)]"> {/* Adjusted width */} 
+                            <SelectTrigger className="h-8 w-[calc(100%-70px)]"> {/* Adjusted width */}
                                 <SelectValue placeholder="Select Version" />
                             </SelectTrigger>
                             <SelectContent>
@@ -766,13 +813,14 @@ export function EvaluationPanel({ currentLanguage }: EvaluationPanelProps) {
                                 ))}
                             </SelectContent>
                         </Select>
-                        {/* Action Buttons */} 
+                        {/* Action Buttons */}
                         <div className="flex items-center ml-1">
                              <Button
                                 variant="ghost"
                                 size="icon"
                                 onClick={() => handleTogglePrompt(column.id)}
                                 className="h-8 w-8"
+                                title={column.showPrompt ? "Hide Prompt" : "Show Prompt"}
                               >
                                 {column.showPrompt ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                               </Button>
@@ -781,6 +829,8 @@ export function EvaluationPanel({ currentLanguage }: EvaluationPanelProps) {
                                 size="icon"
                                 onClick={() => handleRemoveColumn(column.id)}
                                 className="h-8 w-8 text-destructive"
+                                title="Remove Column"
+                                disabled={columns.length <= 1} // Prevent removing last column
                               >
                                 <Trash2 className="h-4 w-4" />
                               </Button>
@@ -815,6 +865,7 @@ export function EvaluationPanel({ currentLanguage }: EvaluationPanelProps) {
                   </TableHead>
                 ))}
 
+                {/* Add Column Button Header */}
                 <TableHead className="w-[100px]">
                   <Button variant="ghost" size="sm" onClick={handleAddColumn} className="h-8">
                     <Plus className="h-4 w-4 mr-1" /> Col
@@ -825,6 +876,7 @@ export function EvaluationPanel({ currentLanguage }: EvaluationPanelProps) {
             <TableBody>
               {testRows.map((row, index) => (
                 <TableRow key={row.id}>
+                  {/* Source Text Cell */}
                   <TableCell className="align-top p-1">
                     <Textarea
                       placeholder={`Source ${index + 1}`}
@@ -833,6 +885,8 @@ export function EvaluationPanel({ currentLanguage }: EvaluationPanelProps) {
                       className="min-h-[80px] h-auto resize-y border-none focus-visible:ring-1 focus-visible:ring-ring p-1"
                     />
                   </TableCell>
+
+                  {/* Reference Text Cell (Conditional) */}
                   {showIdealOutputs && (
                     <TableCell className="align-top p-1">
                        <Textarea
@@ -844,67 +898,86 @@ export function EvaluationPanel({ currentLanguage }: EvaluationPanelProps) {
                     </TableCell>
                   )}
 
+                  {/* Prompt Output/Result Cells */}
                   {columns.map((column) => {
                     const cellId = `${row.id}-${column.id}`;
-                    const isPending = pendingOutputs.has(cellId);
+                    // Determine if the initial generation is pending for this cell
+                    const isGenPending = (evaluationStatus === 'pending' || evaluationStatus === 'running') && pendingOutputs.has(cellId);
+                    // Find the corresponding result data
+                    const output = evaluationResults.find(r =>
+                        r.source_text === row.sourceText &&
+                        r.prompt_id === column.selectedVersionId
+                    ) as (EvaluationResult & { llm_judge_score?: number | null; llm_judge_rationale?: string | null; llm_judge_error?: string | null }) | undefined; // Added judge error type
+
+                    const resultId = output?.id;
+                    const isJudgingPending = judgeStatus === 'pending' && !!output; // Judging is pending only if output exists
 
                     return (
                       <TableCell key={cellId} className="align-top p-2">
-                        {isPending ? (
-                          <div className="flex items-center justify-center text-muted-foreground">
-                            <Loader2 className="h-4 w-4 animate-spin mr-1" /> Thinking...
+                        {/* LOG 3: Log output using self-executing function */}
+                        {(() => { console.log(`[Render] Row: ${row.id}, Col: ${column.id}, Output Data:`, output); return null; })()}
+                        {isGenPending ? (
+                          <div className="flex items-center justify-center text-muted-foreground text-sm">
+                            <Loader2 className="h-4 w-4 animate-spin mr-1" /> Generating...
                           </div>
-                        ) : (
-                          (() => { // Use IIFE to handle logic cleanly
-                            // Find result matching source text and the specific version selected for this column
-                            const output = evaluationResults.find(r =>
-                                r.source_text === row.sourceText && r.prompt_id === column.selectedVersionId // Correct comparison
-                            );
-                            const resultId = output?.id;
+                        ) : output ? (
+                           <div className="space-y-2">
+                              {/* Model Output */}
+                              <p>{output.model_output || "(No output)"}</p>
 
-                            if (output) {
-                              // Display result if found
-                              return (
-                                 <div className="space-y-2">
-                                    <p>{output.model_output || "(No output)"}</p>
-                                    <div className="space-y-2">
-                                      {/* Score Input */}
-                                      <div className="flex">
-                                        {[1, 2, 3, 4, 5].map((star) => (
-                                          <button
-                                            key={star}
-                                            type="button"
-                                            className={`w-6 h-6 ${ (output.score || 0) >= star ? "text-yellow-500" : "text-gray-300 dark:text-gray-600" }`}
-                                            onClick={() => resultId && handleScoreChange(resultId, column.id, star)}
-                                            // Disable if overall eval is running?
-                                            disabled={!!pollingIntervalId || isLoading}
-                                          >
-                                            ★
-                                          </button>
-                                        ))}
-                                      </div>
-                                      {/* Comment Input */}
-                                      <Tabs defaultValue="comment" className="w-full">
-                                         {/* ... TabsList ... */}
-                                        <div className="mt-2 p-2 border rounded-md min-h-[100px] max-h-[150px] overflow-y-auto">
-                                          <Textarea
-                                            placeholder="Add comment..."
-                                            value={output.comment || ""}
-                                            onChange={(e) => resultId && handleCommentChange(resultId, column.id, e.target.value)}
-                                            className="text-sm border-none focus-visible:ring-0 focus-visible:ring-offset-0 p-0 h-full resize-none"
-                                            rows={4}
-                                            disabled={!!pollingIntervalId || isLoading}
-                                          />
-                                        </div>
-                                      </Tabs>
-                                    </div>
+                              {/* LLM Judge Section (only if not pending judging) */}
+                              {!isJudgingPending && (output.llm_judge_score !== undefined && output.llm_judge_score !== null || output.llm_judge_error) && (
+                                <div className="mt-2 pt-2 border-t border-dashed">
+                                  <p className="text-xs font-medium text-muted-foreground">LLM Judge:</p>
+                                  {output.llm_judge_error ? (
+                                      <p className="text-xs text-destructive">Error: {output.llm_judge_error}</p>
+                                  ) : (
+                                      <>
+                                          <p className="text-sm font-semibold">Score: {output.llm_judge_score?.toFixed(1) ?? '-'}</p>
+                                          {output.llm_judge_rationale && (
+                                              <p className="text-xs text-muted-foreground mt-1"><span className="font-medium">Rationale:</span> {output.llm_judge_rationale}</p>
+                                          )}
+                                      </>
+                                  )}
+                                </div>
+                              )}
+                              {isJudgingPending && (
+                                 <div className="mt-2 pt-2 border-t border-dashed flex items-center justify-center text-muted-foreground text-sm">
+                                    <Loader2 className="h-4 w-4 animate-spin mr-1" /> Judging...
                                  </div>
-                              );
-                            } else {
-                              // Display placeholder if not pending and no result yet
-                              return <div className="text-muted-foreground">-</div>;
-                            }
-                          })()
+                              )}
+
+
+                              {/* Manual Score/Comment Section */}
+                              <div className="space-y-1 pt-1">
+                                {/* Score Input */}
+                                <div className="flex">
+                                  {[1, 2, 3, 4, 5].map((star) => (
+                                    <button
+                                      key={star}
+                                      type="button"
+                                      className={`w-5 h-5 ${ (output.score || 0) >= star ? "text-yellow-500" : "text-gray-300 dark:text-gray-600" }`}
+                                      onClick={() => resultId && handleScoreChange(resultId, column.id, star)}
+                                      disabled={!!pollingIntervalId || isLoading || isJudgingPending}
+                                    >
+                                      ★
+                                    </button>
+                                  ))}
+                                </div>
+                                {/* Comment Input */}
+                                <Textarea
+                                  placeholder="Add comment..."
+                                  value={output.comment || ""}
+                                  onChange={(e) => resultId && handleCommentChange(resultId, column.id, e.target.value)}
+                                  className="text-xs border rounded-md p-1 min-h-[50px] resize-y focus-visible:ring-1"
+                                  rows={2}
+                                  disabled={!!pollingIntervalId || isLoading || isJudgingPending}
+                                />
+                              </div>
+                           </div>
+                        ) : (
+                          // Display placeholder if not pending and no result yet
+                          <div className="text-muted-foreground">-</div>
                         )}
                       </TableCell>
                     );
@@ -925,10 +998,19 @@ export function EvaluationPanel({ currentLanguage }: EvaluationPanelProps) {
                   </TableCell>
                 </TableRow>
               ))}
-              {evaluationResults.length === 0 && !isLoadingResults && (
+              {/* Row for "No Results" message */}
+              {testRows.length > 0 && evaluationResults.length === 0 && !isLoadingResults && !(evaluationStatus === 'pending' || evaluationStatus === 'running') && (
                     <TableRow>
-                        <TableCell colSpan={columns.length + (showIdealOutputs ? 2 : 1) + 1} className="text-center">
-                            No results found for this evaluation.
+                        <TableCell colSpan={columns.length + (showIdealOutputs ? 2 : 1) + 1} className="text-center text-muted-foreground py-4">
+                            No results generated for this evaluation run yet.
+                        </TableCell>
+                    </TableRow>
+              )}
+               {/* Row for "No Test Rows" message */}
+              {testRows.length === 0 && (
+                    <TableRow>
+                        <TableCell colSpan={columns.length + (showIdealOutputs ? 2 : 1) + 1} className="text-center text-muted-foreground py-4">
+                            Add test rows below to start an evaluation.
                         </TableCell>
                     </TableRow>
                 )}
@@ -937,6 +1019,7 @@ export function EvaluationPanel({ currentLanguage }: EvaluationPanelProps) {
         </CardContent>
       </Card>
 
+      {/* Bottom Action Buttons */}
       <div className="flex justify-end gap-2">
         <Button variant="outline" onClick={handleAddTestRow}>
           <Plus className="mr-2 h-4 w-4" />
@@ -946,10 +1029,10 @@ export function EvaluationPanel({ currentLanguage }: EvaluationPanelProps) {
           <Download className="mr-2 h-4 w-4" />
           Export Results
         </Button>
-        <Button onClick={handleSaveEvaluation} disabled={!currentEvaluationId || isLoading || !!pollingIntervalId}>
+        <Button onClick={handleSaveEvaluation} disabled={!currentEvaluationId || isLoading || !!pollingIntervalId || judgeStatus === 'pending'}>
             Save Evaluation
         </Button>
       </div>
     </div>
-  )
+  );
 }

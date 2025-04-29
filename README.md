@@ -137,6 +137,7 @@ The application provides a functional core loop for managing prompt versions and
 *   **Unit/Integration Tests:** Add comprehensive tests for backend and potentially frontend.
 *   **User Management UI:** Add frontend UI for user profile settings (e.g., changing language, password).
 *   **Workspace Context:** Replace simulated language context with a proper user/workspace system.
+*   **LLM as Judge Evaluation:** Implement using a separate LLM (e.g., Claude, GPT) to automatically score and provide rationale for translation quality based on source, output, and reference (FR-EV-09 - conceptual).
 
 ## Setup
 

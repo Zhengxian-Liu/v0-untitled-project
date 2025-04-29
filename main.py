@@ -18,6 +18,8 @@ from app.routes import auth # Import the auth router
 # Configure logging
 logging.basicConfig(level=settings.logging_level,
                     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+# Set pymongo logger level higher to reduce verbosity
+logging.getLogger("pymongo").setLevel(logging.WARNING)
 logger = logging.getLogger(__name__)
 
 

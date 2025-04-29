@@ -19,6 +19,7 @@ from app.models.evaluation import (
 from app.services.claude_service import generate_text_with_claude
 from app.routes.auth import get_current_active_user
 from app.models.user import User as UserModel
+from app.services import judge_service
 
 router = APIRouter()
 EVAL_COLLECTION = "evaluations"
@@ -109,6 +110,100 @@ async def run_single_prompt_evaluation_task(
         {"_id": evaluation_id},
         {"$inc": {"completed_prompt_tasks": 1}} # Increment a counter
     )
+
+# --- LLM Judge Background Task --- M
+async def run_llm_judging_task(
+    evaluation_id: PyObjectId,
+    db: AsyncIOMotorDatabase
+):
+    """Background task to run LLM judge on all results for an evaluation."""
+    logger.info(f"[LLM Judge Task] Starting for Evaluation ID: {evaluation_id}")
+    eval_collection = db[EVAL_COLLECTION]
+    results_collection = db[RESULTS_COLLECTION]
+
+    results_cursor = results_collection.find({"evaluation_id": evaluation_id})
+    results_to_judge = await results_cursor.to_list(length=None) # Fetch all results
+
+    if not results_to_judge:
+        logger.warning(f"[LLM Judge Task] No results found for Evaluation ID: {evaluation_id}. Aborting.")
+        await eval_collection.update_one(
+            {"_id": evaluation_id},
+            {"$set": {"judge_status": "failed", "judged_at": datetime.utcnow()}}
+        )
+        return
+
+    total_results = len(results_to_judge)
+    processed_count = 0
+    error_count = 0
+    judge_model_id_used = judge_service.DEFAULT_JUDGE_MODEL_ID # Track default used
+
+    logger.info(f"[LLM Judge Task] Found {total_results} results to judge for Evaluation ID: {evaluation_id}")
+
+    for result_doc in results_to_judge:
+        result_id = result_doc["_id"]
+        logger.debug(f"[LLM Judge Task] Judging result ID: {result_id}")
+        try:
+            # Prepare inputs for the judge service
+            source_text = result_doc.get("source_text")
+            model_output = result_doc.get("model_output")
+            reference_text = result_doc.get("reference_text")
+            reference_materials = {"human_reference": reference_text} if reference_text else {}
+
+            if not source_text or model_output is None: # Check if model_output is None or empty string
+                 logger.warning(f"[LLM Judge Task] Skipping result {result_id} due to missing source or output.")
+                 update_payload = {"$set": {
+                      "llm_judge_error": "Skipped: Missing source or model output."
+                 }}
+                 error_count += 1 # Count as error for status reporting
+            else:
+                 # Call the judge service function
+                 # TODO: Allow passing judge_model_id and template from API request later
+                 judge_result = await judge_service.evaluate_translation(
+                     source_text=source_text,
+                     model_output=model_output,
+                     reference_materials=reference_materials,
+                     # judge_model_id=... # Use default for now
+                     # criteria_prompt_template=... # Use default for now
+                 )
+                 judge_model_id_used = judge_result.get("judge_model_id", judge_model_id_used)
+
+                 # Prepare update payload based on judge result
+                 update_payload = {"$set": {
+                     "llm_judge_score": judge_result.get("score"),
+                     "llm_judge_rationale": judge_result.get("rationale"),
+                     "llm_judge_model_id": judge_model_id_used,
+                     # Optionally store error or status per result
+                     "llm_judge_error": judge_result.get("error_message") if judge_result.get("status") == "error" else None
+                 }}
+
+                 if judge_result.get("status") == "error":
+                     error_count += 1
+
+            # Update the specific EvaluationResult document
+            await results_collection.update_one({"_id": result_id}, update_payload)
+            processed_count += 1
+            logger.debug(f"[LLM Judge Task] Updated result {result_id} ({processed_count}/{total_results})")
+
+        except Exception as e:
+            logger.error(f"[LLM Judge Task] Unexpected error processing result {result_id}: {e}", exc_info=True)
+            error_count += 1
+            # Attempt to mark the result as failed
+            try:
+                await results_collection.update_one(
+                    {"_id": result_id},
+                    {"$set": {"llm_judge_error": f"Unexpected task error: {e}"}}
+                )
+            except Exception as update_err:
+                 logger.error(f"[LLM Judge Task] Failed to update error status for result {result_id}: {update_err}")
+
+    # --- Final Evaluation Status Update --- M
+    final_judge_status = "failed" if error_count > 0 else "completed"
+    logger.info(f"[LLM Judge Task] Finished for Eval ID: {evaluation_id}. Status: {final_judge_status}, Errors: {error_count}/{total_results}")
+    await eval_collection.update_one(
+        {"_id": evaluation_id},
+        {"$set": {"judge_status": final_judge_status, "judged_at": datetime.utcnow()}}
+    )
+# --- End LLM Judge Background Task ---
 
 # --- API Endpoints (Modified) --- M
 
@@ -235,7 +330,8 @@ async def check_evaluation_completion(
                      eval_record = updated_eval_record
                 else:
                      logger.info(f"Evaluation {evaluation_id} status was likely already completed/failed before update attempt.")
-                     eval_record = await db[EVAL_COLLECTION].find_one({"_id": evaluation_id})
+                     # Fetch again even if update didn't modify, to get latest judge_status etc.
+                     # eval_record = await db[EVAL_COLLECTION].find_one({\"_id\": evaluation_id})
 
             except ValueError as e:
                  logger.error(f"!!! CAUGHT ValueError during find_one_and_update for eval completion ({evaluation_id}) !!!")
@@ -246,10 +342,15 @@ async def check_evaluation_completion(
                  logger.exception("Unexpected Exception details:")
                  raise HTTPException(status_code=500, detail="Internal error updating evaluation status (Exception).")
 
-    if not eval_record:
+    # --- Ensure we return the LATEST state --- M
+    # Refetch the record regardless of status changes to ensure we have latest judge_status etc.
+    final_eval_record = await db[EVAL_COLLECTION].find_one({"_id": evaluation_id})
+    if not final_eval_record:
+         # This case should be rare if it existed before, but handle it.
+         logger.error(f"Evaluation {evaluation_id} disappeared after status check!")
          raise HTTPException(status_code=404, detail=f"Evaluation {evaluation_id} not found after update check")
 
-    return Evaluation(**eval_record)
+    return Evaluation(**final_eval_record) # Return the freshly fetched record
 
 @router.get(
     "/",
@@ -396,4 +497,60 @@ async def update_evaluation_result(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to retrieve evaluation result after update."
-        ) 
+        )
+
+# --- API Endpoint to Trigger Judging --- M
+@router.post(
+    "/{evaluation_id}/judge",
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="Start LLM Judging for an Evaluation",
+    description="Triggers a background task to evaluate all results of an evaluation using an LLM judge.",
+    responses={
+        404: {"description": "Evaluation not found"},
+        403: {"description": "User not authorized"},
+        409: {"description": "Judging already in progress or completed"}
+    }
+)
+async def trigger_llm_judging(
+    evaluation_id: PyObjectId,
+    background_tasks: BackgroundTasks,
+    db: AsyncIOMotorDatabase = Depends(get_database),
+    current_user: UserModel = Depends(get_current_active_user)
+):
+    """Initiates the LLM judging process for a given evaluation ID."""
+
+    # 1. Fetch parent evaluation
+    evaluation = await db[EVAL_COLLECTION].find_one({"_id": evaluation_id})
+    if not evaluation:
+        raise HTTPException(status_code=404, detail=f"Evaluation {evaluation_id} not found")
+
+    # 2. Authorization check
+    if evaluation.get("user_id") != current_user.id:
+        raise HTTPException(status_code=403, detail="User not authorized to judge this evaluation")
+
+    # 3. Check current judge status (optional: allow re-judging?)
+    current_judge_status = evaluation.get("judge_status")
+    if current_judge_status not in [None, "failed", "not_started"]: # Allow running if failed or never run
+         raise HTTPException(
+             status_code=status.HTTP_409_CONFLICT,
+             detail=f"LLM Judging for evaluation {evaluation_id} is already '{current_judge_status}'."
+         )
+
+    # 4. Update status to pending and schedule task
+    update_result = await db[EVAL_COLLECTION].update_one(
+        {"_id": evaluation_id},
+        {"$set": {"judge_status": "pending"}}
+    )
+
+    if update_result.modified_count == 0:
+        # Should not happen if checks above passed, but handle defensively
+        logger.error(f"Failed to update judge_status to pending for evaluation {evaluation_id}")
+        raise HTTPException(status_code=500, detail="Failed to initiate judging process.")
+
+    background_tasks.add_task(run_llm_judging_task, evaluation_id, db)
+    logger.info(f"Scheduled LLM judging task for Evaluation ID: {evaluation_id}")
+
+    return {"message": "LLM judging process initiated."}
+# --- End Trigger Endpoint ---
+
+# --- REMOVED: Status Check Endpoint (Using check_completion instead) --- M 

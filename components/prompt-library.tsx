@@ -51,24 +51,24 @@ export function PromptLibrary({ onPromptSelect, currentLanguage }: PromptLibrary
   const [error, setError] = useState<string | null>(null)
   const { toast } = useToast()
 
-  const fetchPrompts = async () => {
-    setIsLoading(true)
-    setError(null)
-    try {
-      const data = await apiClient<Prompt[]>('/prompts/')
-      console.log("PromptLibrary: Fetched data:", data)
-      if (Array.isArray(data)) {
-        setPrompts(data)
-      } else {
-        throw new Error("Invalid data format received from API")
+    const fetchPrompts = async () => {
+      setIsLoading(true)
+      setError(null)
+      try {
+        const data = await apiClient<Prompt[]>('/prompts/')
+        console.log("PromptLibrary: Fetched data:", data)
+        if (Array.isArray(data)) {
+          setPrompts(data)
+        } else {
+          throw new Error("Invalid data format received from API")
+        }
+      } catch (err) {
+        console.error("Failed to fetch prompts:", err)
+        setError(err instanceof Error ? err.message : "An unknown error occurred")
+      } finally {
+        setIsLoading(false)
       }
-    } catch (err) {
-      console.error("Failed to fetch prompts:", err)
-      setError(err instanceof Error ? err.message : "An unknown error occurred")
-    } finally {
-      setIsLoading(false)
     }
-  }
 
   useEffect(() => {
     fetchPrompts()

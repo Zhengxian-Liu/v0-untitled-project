@@ -374,7 +374,7 @@ async def delete_prompt(
         {"language": 1, "is_latest": 1} # Also fetch is_latest for potential future use
     )
     if not prompt_to_delete:
-         raise HTTPException(
+        raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Prompt version with ID {prompt_id} not found or already deleted",
         )
@@ -404,7 +404,7 @@ async def delete_prompt(
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"Prompt version with ID {prompt_id} not found or could not be marked as deleted",
-            )
+        )
 
     # No content to return on successful deletion
     return None # FastAPI handles None return with 204 status correctly

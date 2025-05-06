@@ -110,9 +110,6 @@ export function EvaluationPanel({ currentLanguage }: EvaluationPanelProps) {
   // ADDED: State for showing sent prompts
   const [showSentPrompts, setShowSentPrompts] = useState(false);
 
-  // ADDED: State for showing additional instructions column
-  const [showInstructionsColumn, setShowInstructionsColumn] = useState(true);
-
   // Projects data
   const projects = [
     { id: "genshin", name: "Genshin" },
@@ -726,18 +723,6 @@ export function EvaluationPanel({ currentLanguage }: EvaluationPanelProps) {
             />
             <Label htmlFor="show-sent-prompts" className="text-sm whitespace-nowrap">
               Show Sent Prompts
-            </Label>
-          </div>
-
-          {/* ADDED: Show Instructions Column Toggle */}
-          <div className="flex items-center space-x-2">
-            <Checkbox
-              id="show-instructions-col"
-              checked={showInstructionsColumn}
-              onCheckedChange={(checked) => setShowInstructionsColumn(!!checked)}
-            />
-            <Label htmlFor="show-instructions-col" className="text-sm whitespace-nowrap">
-              Show Instructions Column
             </Label>
           </div>
 

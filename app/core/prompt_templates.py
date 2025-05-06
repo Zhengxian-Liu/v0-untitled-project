@@ -2,7 +2,27 @@
 
 # Defines how the LLM should format its final translation output.
 FIXED_OUTPUT_REQUIREMENT_TEMPLATE = """
-Assistant:\n<translated_text>"""
+<OUTPUT_REQUIREMENTS>
+1. Provide **only the final translation** in the correct target language **as raw text within <translated_text> tags**
+2. **Never add:** 
+   - Explanations 
+   - Formatting notes
+   - Partial translations
+   - Text before/after the tags
+3. **Invalid examples (NEVER DO THIS):**
+   <!-- --> comments 
+   "Translation:" <translated_text>...
+   (Note: This means...)</translated_text>
+</OUTPUT_REQUIREMENTS>
+
+<MODEL_RESPONSE_FORMAT>
+**Your ENTIRE OUTPUT must be EXACTLY ONE of these:**
+<translated_text>YOUR_TRANSLATION_HERE</translated_text>
+-or-
+N/A
+
+**EVEN 1 CHARACTER outside the tags makes the response invalid**
+</MODEL_RESPONSE_FORMAT>"""
 
 # Corresponds to TASK_INFO_TEMPLATE in prompt-editor.tsx
 # Defines the structure for runtime information passed in the user prompt.

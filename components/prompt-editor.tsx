@@ -33,12 +33,22 @@ import {
   AlertTriangle,
   Loader2,
   Check,
+  Library,
 } from "lucide-react"
 import type { Prompt, PromptSection, SavedSection, ProductionPrompt } from "@/types"
 import { toast } from "sonner"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { apiClient } from "@/lib/apiClient"
+import { PredefinedTemplate, predefinedSectionTemplates } from "@/lib/prompt-templates"
+
+// +++ ADD: Type for fetched prompt structure M +++
+type PromptStructure = {
+  output_requirement: string;
+  task_info: string;
+  // character_info?: string; // Add later if needed
+}
+// +++ END ADD +++
 
 type Template = {
   id: string
@@ -210,6 +220,12 @@ export function PromptEditor({ prompt, onSaveSuccess, currentLanguage }: PromptE
   const [showProductionConfirmDialog, setShowProductionConfirmDialog] = useState(false)
   // --- End Restore ---
 
+  // +++ ADD: State for fetched backend templates M +++
+  const [promptStructure, setPromptStructure] = useState<PromptStructure | null>(null);
+  const [isLoadingStructure, setIsLoadingStructure] = useState(true);
+  const [structureError, setStructureError] = useState<string | null>(null);
+  // +++ END ADD +++
+
   // --- Versioning State --- M
   const [versionHistory, setVersionHistory] = useState<Prompt[]>([])
   const [isLoadingHistory, setIsLoadingHistory] = useState(false)
@@ -284,6 +300,29 @@ export function PromptEditor({ prompt, onSaveSuccess, currentLanguage }: PromptE
     }
   }, [prompt])
 
+  // +++ ADD: Effect to fetch backend prompt structure M +++
+  useEffect(() => {
+    const fetchPromptStructure = async () => {
+      setIsLoadingStructure(true);
+      setStructureError(null);
+      try {
+        const data = await apiClient<PromptStructure>("/prompt-structure"); // Assumes API endpoint is /api/v1/prompt-structure
+        setPromptStructure(data);
+      } catch (err) {
+        console.error("Error fetching prompt structure:", err);
+        const errorMsg = err instanceof Error ? err.message : "Unknown error fetching prompt structure";
+        setStructureError(errorMsg);
+        toast.error(`Failed to load prompt structure: ${errorMsg}`);
+        setPromptStructure(null); // Clear structure on error
+      } finally {
+        setIsLoadingStructure(false);
+      }
+    };
+
+    fetchPromptStructure();
+  }, []); // Empty dependency array means run once on mount
+  // +++ END ADD +++
+
   // Effect to check production status
   useEffect(() => {
     const fetchCurrentProductionPrompt = async () => {
@@ -326,22 +365,6 @@ export function PromptEditor({ prompt, onSaveSuccess, currentLanguage }: PromptE
     toast.info(`Loaded version ${selectedPrompt.version}`);
   };
   // --- End Version Select Handler ---
-
-  // --- Fixed Prompt Parts --- M
-  // TODO: Align these precisely with backend constants/logic
-  const FIXED_OUTPUT_REQUIREMENT = `Assistant:\n<translated_text>`; // Example based on prompt_logic.md
-  const TASK_INFO_TEMPLATE = `\
-<your_task>
-    <previous_sentence_context>{PREVIOUS_CONTEXT}</previous_sentence_context>  // Context for reference only
-    <source_text>{SOURCE_TEXT}</source_text>  // Part to be translated
-    <following_sentence_context>{FOLLOWING_CONTEXT}</following_sentence_context> // Context for reference only
-    <target_language>{TARGET_LANGUAGE}</target_language>
-    <terminology>{TERMINOLOGY}</terminology> // List of terms to be respected
-    <similar_translations>{SIMILAR_TRANSLATIONS}</similar_translations> // Similar translations with similarity percentages
-    <additional_instructions>{ADDITIONAL_INSTRUCTIONS}</additional_instructions>  // some additional instructions about this file that can help on translation
-  </your_task>
-`;
-  // --- End Fixed Parts ---
 
   const handleTagToggle = (tag: string) => {
     if (selectedTags.includes(tag)) {
@@ -526,13 +549,17 @@ export function PromptEditor({ prompt, onSaveSuccess, currentLanguage }: PromptE
       .map((section) => `### ${section.name}\n${section.content}`)
       .join("\n\n");
     // Combine and highlight
-    const fullSystemPrompt = `${rules}\n\n${FIXED_OUTPUT_REQUIREMENT}`; 
+    // +++ UPDATE: Use fetched template M +++
+    const fullSystemPrompt = `${rules}\n\n${promptStructure?.output_requirement || "Error loading output requirement..."}`;
+    // +++ END UPDATE +++
     console.log("Assembled System Prompt Preview:", fullSystemPrompt);
     return highlightVariables(fullSystemPrompt);
   };
 
   const assembleUserPromptPreview = () => {
-    let userPrompt = TASK_INFO_TEMPLATE;
+    // +++ UPDATE: Use fetched template M +++
+    let userPrompt = promptStructure?.task_info || "Error loading task info...";
+    // +++ END UPDATE +++
     userPrompt = userPrompt.replace("{TARGET_LANGUAGE}", currentLanguage || "{TARGET_LANGUAGE}");
     // Highlight after substitution
     return highlightVariables(userPrompt);
@@ -612,6 +639,27 @@ export function PromptEditor({ prompt, onSaveSuccess, currentLanguage }: PromptE
 
   // >>> ADD LOG <<<
   console.log("[PromptEditor Render] showPreview state:", showPreview);
+
+  // +++ ADD: Handler for inserting predefined template M +++
+  const handlePredefinedTemplateInsert = (template: PredefinedTemplate, sectionId: string) => {
+    setSections(
+      sections.map((section) => {
+        if (section.id === sectionId) {
+          // Append the template content to the existing content
+          const newContent = section.content
+            ? `${section.content}\n\n${template.content}`
+            : template.content;
+          return {
+            ...section,
+            content: newContent,
+          };
+        }
+        return section;
+      }),
+    );
+    toast.info(`Template "${template.name}" inserted.`);
+  };
+  // +++ END ADD +++
 
   return (
     <div className="space-y-6">
@@ -767,7 +815,8 @@ export function PromptEditor({ prompt, onSaveSuccess, currentLanguage }: PromptE
                 </DialogContent>
               </Dialog>
 
-              <Dialog>
+              {/* --- COMMENT OUT/REMOVE CONFUSING TOP-LEVEL TEMPLATE BUTTON M --- */}
+              {/* <Dialog>
                 <DialogTrigger asChild>
                   <Button variant="outline" size="sm">
                     <Code className="mr-2 h-4 w-4" />
@@ -784,7 +833,7 @@ export function PromptEditor({ prompt, onSaveSuccess, currentLanguage }: PromptE
                         key={template.id}
                         className="cursor-pointer rounded-lg border p-4 hover:bg-muted"
                         onClick={() => {
-                          handleTemplateSelect(template)
+                          handleTemplateSelect(template) // This was the old logic
                         }}
                       >
                         <h4 className="font-medium">{template.name}</h4>
@@ -793,7 +842,8 @@ export function PromptEditor({ prompt, onSaveSuccess, currentLanguage }: PromptE
                     ))}
                   </div>
                 </DialogContent>
-              </Dialog>
+              </Dialog> */}
+              {/* --- END COMMENT OUT --- */}
 
               <Button variant="outline" size="sm" onClick={handleAddSection}>
                 <Plus className="mr-2 h-4 w-4" />
@@ -869,7 +919,33 @@ export function PromptEditor({ prompt, onSaveSuccess, currentLanguage }: PromptE
                     className="font-mono min-h-[120px]"
                   />
                 </CardContent>
-                <CardFooter className="flex justify-end pt-0">
+                <CardFooter className="flex justify-end pt-0 gap-2">
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        disabled={!predefinedSectionTemplates[section.type] || predefinedSectionTemplates[section.type].length === 0}
+                      >
+                        <Library className="mr-2 h-4 w-4" />
+                        Insert Template
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent>
+                      {(predefinedSectionTemplates[section.type] || []).map((template) => (
+                        <DropdownMenuItem
+                          key={template.id}
+                          onSelect={() => handlePredefinedTemplateInsert(template, section.id)}
+                          className="cursor-pointer"
+                        >
+                          {template.name}
+                        </DropdownMenuItem>
+                      ))}
+                      {(!predefinedSectionTemplates[section.type] || predefinedSectionTemplates[section.type].length === 0) && (
+                         <DropdownMenuItem disabled>No templates for this section type</DropdownMenuItem>
+                      )}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                   <Dialog>
                     <DialogTrigger asChild>
                       <Button variant="ghost" size="sm">
@@ -1004,35 +1080,44 @@ export function PromptEditor({ prompt, onSaveSuccess, currentLanguage }: PromptE
       </Dialog>
       {/* --- End Restore --- */}
 
-      {/* --- ADDED: Read-only display for fixed prompt parts --- M */}
+      {/* --- UPDATE: Read-only display for fixed prompt parts (use state) M --- */}
       <div className="space-y-4">
-         <Card className="bg-secondary/30">
-           <CardHeader className="pb-2">
-             <CardTitle className="text-base">(System Prompt) Output Requirement (Fixed)</CardTitle>
-             <CardDescription className="text-xs">The model will be instructed to follow this output format.</CardDescription>
-           </CardHeader>
-           <CardContent>
-             <pre className="whitespace-pre-wrap font-mono text-sm p-4 rounded-md bg-background/50 overflow-auto max-h-[150px]">
-               {FIXED_OUTPUT_REQUIREMENT}
-             </pre>
-           </CardContent>
-         </Card>
-         <Card className="bg-secondary/30">
-           <CardHeader className="pb-2">
-             <CardTitle className="text-base">(User Prompt) Task Info (Template)</CardTitle>
-             <CardDescription className="text-xs">This structure will be filled with runtime data (source text, TM, etc.).</CardDescription>
-           </CardHeader>
-           <CardContent>
-             <pre className="whitespace-pre-wrap font-mono text-sm p-4 rounded-md bg-background/50 overflow-auto max-h-[250px]">
-               {/* Use highlighting helper here as well */}
-               {highlightVariables(TASK_INFO_TEMPLATE.replace("{TARGET_LANGUAGE}", currentLanguage || "{TARGET_LANGUAGE}"))}
-             </pre>
-           </CardContent>
-         </Card>
-         {/* Optional: Placeholder for Character Info */}
-          {/* <Card> ... Character Info Display ... </Card> */}
+        <Card className="bg-secondary/30">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">(System Prompt) Output Requirement (Fixed)</CardTitle>
+            <CardDescription className="text-xs">The model will be instructed to follow this output format.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {isLoadingStructure && <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />}
+            {structureError && <p className="text-sm text-destructive">Error: {structureError}</p>}
+            {promptStructure && (
+              <pre className="whitespace-pre-wrap font-mono text-sm p-4 rounded-md bg-background/50 overflow-auto max-h-[150px]">
+                {/* Display fetched content */}
+                {promptStructure.output_requirement}
+              </pre>
+            )}
+          </CardContent>
+        </Card>
+        <Card className="bg-secondary/30">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">(User Prompt) Task Info (Template)</CardTitle>
+            <CardDescription className="text-xs">This structure will be filled with runtime data (source text, TM, etc.).</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {isLoadingStructure && <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />}
+            {structureError && <p className="text-sm text-destructive">Error: {structureError}</p>}
+            {promptStructure && (
+              <pre className="whitespace-pre-wrap font-mono text-sm p-4 rounded-md bg-background/50 overflow-auto max-h-[250px]">
+                {/* Use highlighting helper here as well, substitute language */}
+                {highlightVariables(promptStructure.task_info.replace("{TARGET_LANGUAGE}", currentLanguage || "{TARGET_LANGUAGE}"))}
+              </pre>
+            )}
+          </CardContent>
+        </Card>
+        {/* Optional: Placeholder for Character Info */}
+         {/* <Card> ... Character Info Display ... </Card> */}
       </div>
-      {/* --- END: Read-only display --- */}
+      {/* --- END UPDATE --- */}
 
     </div>
   )

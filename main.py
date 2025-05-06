@@ -14,6 +14,7 @@ from app.core.config import settings
 from app.db.client import connect_to_mongo, close_mongo_connection
 from app.routes import prompts, evaluations, evaluation_sessions
 from app.routes import auth # Import the auth router
+from app.routes import prompt_config
 
 # Configure logging
 logging.basicConfig(level=settings.logging_level,
@@ -72,6 +73,7 @@ app.include_router(auth.router, prefix="/api/v1/auth", tags=["Authentication"]) 
 app.include_router(prompts.router, prefix="/api/v1/prompts", tags=["Prompts"])
 app.include_router(evaluations.router, prefix="/api/v1/evaluations", tags=["Evaluations"])
 app.include_router(evaluation_sessions.router, prefix="/api/v1/evaluation-sessions", tags=["Evaluation Sessions"])
+app.include_router(prompt_config.router, prefix="/api/v1", tags=["Prompt Configuration"])
 
 # Placeholder for future evaluation router
 # from app.routes import evaluations

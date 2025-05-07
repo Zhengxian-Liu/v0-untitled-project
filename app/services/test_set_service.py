@@ -68,8 +68,13 @@ async def process_and_save_test_set(
         user_id=user_id
     )
     
-    # Convert to UserTestSetInDB to get the ID before saving entries
     new_test_set = UserTestSetInDB(**test_set_metadata.model_dump())
+
+    # Prepare document for insertion, ensuring _id is the UUID from the model's 'id' field
+    doc_to_insert = new_test_set.model_dump(exclude_none=True) # Use exclude_none=True to not insert None fields
+    doc_to_insert['_id'] = new_test_set.id # Explicitly set _id for MongoDB to be the UUID
+    if 'id' in doc_to_insert and doc_to_insert['id'] == new_test_set.id:
+        del doc_to_insert['id'] # Avoid inserting both 'id' and '_id' if they are the same UUID object
 
     # Prepare test set entries
     entries_to_insert = []
@@ -101,19 +106,16 @@ async def process_and_save_test_set(
             text_id_value=text_id_value,
             extra_info_value=extra_info_value
         )
-        entries_to_insert.append(entry_data.model_dump(by_alias=True))
+        entries_to_insert.append(entry_data.model_dump(exclude_none=True))
     
     if not entries_to_insert:
         # This could happen if all rows were skipped due to missing source_text after mapping
         # Or if the file was empty after the header row (if any)
         raise HTTPException(status_code=400, detail="No valid entries could be processed from the file based on mappings.")
 
-    # Perform database operations
     try:
-        # Save metadata
-        await db[USER_TEST_SETS_COLLECTION].insert_one(new_test_set.model_dump(by_alias=True))
+        await db[USER_TEST_SETS_COLLECTION].insert_one(doc_to_insert)
         
-        # Save entries (bulk insert)
         if entries_to_insert:
             await db[TEST_SET_ENTRIES_COLLECTION].insert_many(entries_to_insert)
             

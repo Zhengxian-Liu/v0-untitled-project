@@ -205,4 +205,25 @@ export interface TestSetUploadResponse {
   test_set_id: string; // UUIDs are typically strings in JSON responses
   test_set_name: string;
 }
-// --- End Backend Response Types ---
+
+// --- User Test Set Summary (for listing) ---
+export interface UserTestSetSummary {
+  id: string; // UUID as string
+  test_set_name: string;
+  language_code: string;
+  original_file_name: string;
+  row_count: number;
+  upload_timestamp: string; // ISO datetime string
+}
+// --- End User Test Set Summary ---
+
+// --- Test Set Entry (for listing entries of a test set) ---
+export interface TestSetEntryBase {
+  test_set_id: string; // UUID as string
+  row_number_in_file?: number | null;
+  source_text: string;
+  reference_text?: string | null;
+  text_id_value?: string | null;
+  extra_info_value?: string | null;
+}
+// --- End Test Set Entry ---

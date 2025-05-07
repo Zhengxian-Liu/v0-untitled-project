@@ -51,4 +51,20 @@ class TestSetEntryInDB(TestSetEntryCreate):
 class TestSetUploadResponse(BaseModel):
     message: str
     test_set_id: uuid.UUID
-    test_set_name: str 
+    test_set_name: str
+
+class UserTestSetSummary(BaseModel):
+    id: uuid.UUID = Field(validation_alias="_id") # Use _id from MongoDB doc to populate this field
+    test_set_name: str
+    language_code: str
+    original_file_name: str
+    row_count: int
+    upload_timestamp: datetime
+
+    class Config:
+        from_attributes = True
+        populate_by_name = True # Allow population by alias
+        json_encoders = {
+            uuid.UUID: str, 
+            datetime: lambda dt: dt.isoformat()
+        } 

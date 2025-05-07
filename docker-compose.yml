@@ -41,20 +41,19 @@ services:
     restart: unless-stopped # Added restart policy
 
   database:
-    image: mongo:latest
+    image: mongo:7.0
     container_name: promptcraft_mongo_db
     ports:
-     - "127.0.0.1:27017:27017" # Map host localhost port 27017 to container port 27017
+     - "127.0.0.1:27017:27017"
     volumes:
-      - mongo_data:/data/db # Persist data using a named volume
-    # Optional: Add healthcheck for MongoDB
-    # healthcheck:
-    #   test: echo 'db.runCommand("ping").ok' | mongo localhost:27017/test --quiet
-    #   interval: 10s
-    #   timeout: 10s
-    #   retries: 5
-    #   start_period: 30s
-    restart: unless-stopped # Added restart policy
+      - mongo_data:/data/db
+    healthcheck:
+      test: echo 'db.runCommand("ping").ok' | mongo localhost:27017/test --quiet
+      interval: 10s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    restart: unless-stopped
 
 volumes:
   mongo_data:

@@ -22,7 +22,7 @@ import {
   DialogTrigger,
   DialogClose,
 } from "@/components/ui/dialog"
-import type { Prompt, EvaluationResult, Evaluation, UploadedFileInfo, ColumnMapping, TestSetUploadResponse } from "@/types"
+import type { Prompt, EvaluationResult, Evaluation, UploadedFileInfo, ColumnMapping, TestSetUploadResponse, UserTestSetSummary, TestSetEntryBase } from "@/types"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { toast } from "sonner"
 import { apiClient } from "@/lib/apiClient"
@@ -100,7 +100,7 @@ const NOT_APPLICABLE_VALUE = "--not-applicable--"; // For mapping dropdowns
 export function EvaluationPanel({ currentLanguage }: EvaluationPanelProps) {
   const [selectedProject, setSelectedProject] = useState("genshin")
   const [showIdealOutputs, setShowIdealOutputs] = useState(false)
-  const [testSetType, setTestSetType] = useState("manual") // Default to manual row input
+  const [testSetType, setTestSetType] = useState("manual") // manual, upload_new, uploaded_existing
   const [selectedTestSet, setSelectedTestSet] = useState("1")
   const [isLoading, setIsLoading] = useState(false)
 
@@ -167,7 +167,11 @@ export function EvaluationPanel({ currentLanguage }: EvaluationPanelProps) {
     extraInfoColumn: null,
   });
   const [testSetName, setTestSetName] = useState<string>("");
-  // --- End State ---
+
+  // NEW States for listing and selecting existing uploaded test sets
+  const [userTestSetsList, setUserTestSetsList] = useState<UserTestSetSummary[]>([]);
+  const [isLoadingUserTestSets, setIsLoadingUserTestSets] = useState(false);
+  const [selectedUserTestSetId, setSelectedUserTestSetId] = useState<string | null>(null);
 
   // --- Fetch Prompts Effect --- M
   useEffect(() => {
@@ -623,6 +627,7 @@ export function EvaluationPanel({ currentLanguage }: EvaluationPanelProps) {
       
       toast.success(savedTestData.message || `测试集 "${savedTestData.test_set_name}" 已成功上传并处理。`);
       setIsUploadModalOpen(false); 
+      fetchUserTestSets(); // REFETCH list after successful upload
       
       // TODO: Refresh list of user-uploaded test sets.
       // e.g., fetchUserTestSets(); 
@@ -646,7 +651,78 @@ export function EvaluationPanel({ currentLanguage }: EvaluationPanelProps) {
     setIsUploadModalOpen(true);
   };
 
-  // Handle running evaluation
+  // --- Handler for selecting an existing uploaded test set --- MODIFIED
+  const handleSelectUserTestSet = async (testSetId: string | null) => {
+    setSelectedUserTestSetId(testSetId);
+    setTestRows([]); // Clear existing rows immediately
+
+    if (testSetId) {
+      setTestSetType("uploaded_existing");
+      setUploadedTestSetFile(null); 
+      const selectedSetMeta = userTestSetsList.find(ts => ts.id === testSetId);
+      toast.info(`已选择测试集: ${selectedSetMeta?.test_set_name}. 正在加载数据...`);
+      
+      // Fetch and populate entries for this testSetId
+      try {
+        // setIsLoadingTestSetEntries(true); // Optional: add a loading state for entries
+        const entries = await apiClient<TestSetEntryBase[]>(`/test-sets/${testSetId}/entries`);
+        
+        const formattedTestRows: TestRow[] = entries.map((entry, index) => ({
+          id: `uploaded-${testSetId}-${index}`, // Create a unique frontend ID
+          sourceText: entry.source_text,
+          referenceText: entry.reference_text || "", // Default to empty string if null
+          // Assuming 'additional_instructions' is not directly in TestSetEntryBase
+          // It might come from 'extra_info_value' or not be present for uploaded sets
+          additional_instructions: entry.extra_info_value || "" 
+        }));
+        
+        setTestRows(formattedTestRows);
+        if (formattedTestRows.length === 0) {
+            toast.info("选择的测试集没有有效数据行。");
+        } else {
+            toast.success(`测试集 "${selectedSetMeta?.test_set_name}" 的数据已加载 (${formattedTestRows.length} 行)。`);
+        }
+
+      } catch (error: any) {
+        console.error(`Failed to fetch entries for test set ${testSetId}:`, error);
+        toast.error(`加载测试集数据失败: ${error.response?.data?.detail || error.message || "未知错误"}`);
+        setTestSetType("manual"); // Revert to manual on error
+      } finally {
+        // setIsLoadingTestSetEntries(false);
+      }
+    } else {
+      // Switched back to e.g. manual or no selection from dropdown
+      if (testSetType === "uploaded_existing") {
+        setTestSetType("manual"); 
+      }
+    }
+  };
+  
+  // Handle adding a test row - MODIFIED
+  const handleAddTestRow = () => {
+    setTestRows([...testRows, { id: Date.now().toString(), sourceText: "", referenceText: "", additional_instructions: "" }]);
+    if (testSetType !== "manual") {
+        toast.info("已切换到手动输入模式。");
+    }
+    setTestSetType("manual"); 
+    setUploadedTestSetFile(null); 
+    setSelectedUserTestSetId(null); // Clear selected existing test set
+    setIsUploadModalOpen(false); 
+  };
+
+  // --- REINSTATE MISSING HANDLERS & handleRunEvaluation ---
+  const handleTestRowChange = (id: string, field: keyof Omit<TestRow, 'id'>, value: string) => {
+    setTestRows(prevRows =>
+      prevRows.map(row =>
+        row.id === id ? { ...row, [field]: value } : row
+      )
+    );
+  };
+
+  const handleDeleteTestRow = (id: string) => {
+    setTestRows(prevRows => prevRows.filter(row => row.id !== id));
+  };
+
   const handleRunEvaluation = async () => {
     setIsLoading(true);
     setIsCompletionToastShown(false); 
@@ -654,7 +730,7 @@ export function EvaluationPanel({ currentLanguage }: EvaluationPanelProps) {
     setPendingOutputs(new Set());
     setCurrentEvaluationId(null);
     setEvaluationStatus("pending");
-    console.log("Running evaluation...");
+    console.log("Running evaluation with current test rows...");
 
     const promptIds = columns.map(col => col.selectedVersionId).filter(id => !!id);
     if (promptIds.length === 0) {
@@ -663,39 +739,30 @@ export function EvaluationPanel({ currentLanguage }: EvaluationPanelProps) {
       return;
     }
 
-    let currentTestSetData: EvaluationRequestData[] = [];
-    let currentTestSetName: string = "Manual Input";
-
-    if (testSetType === 'upload' && uploadedTestSetFile) {
-      // TODO: Replace this with actual parsed data from uploadedTestSetFile + mappings
-      // This is a placeholder until parsing and mapping are done.
-      toast.info("Running evaluation with an uploaded file is not fully implemented. Using placeholder data or manual rows if available.");
-      // If you have a temporary way to get data from uploadedTestSetFile, use it here.
-      // Otherwise, it might fall back to empty or manual testRows.
-      // For demonstration, let's assume testRows might have been populated by a parsed file (not yet implemented)
-      currentTestSetData = testRows.map(row => ({
+    // Ensure testRows are used as the source of truth for the test set data to be sent
+    let currentTestSetData: EvaluationRequestData[] = testRows.map(row => ({
         source_text: row.sourceText,
         reference_text: row.referenceText.trim() === "" ? null : row.referenceText,
-        // additional_instructions: row.additional_instructions.trim() === "" ? null : row.additional_instructions
-      })); // Adapt if 'additional_instructions' exists in your uploaded file structure
-      currentTestSetName = uploadedTestSetFile.name;
-
-    } else { // Manual input
-      currentTestSetData = testRows.map(row => ({
-        source_text: row.sourceText,
-        reference_text: row.referenceText.trim() === "" ? null : row.referenceText,
-        // additional_instructions: row.additional_instructions.trim() === "" ? null : row.additional_instructions
-      })); 
-    }
-    
+        // Cast to any to include additional_instructions if your EvaluationRequestData model doesn't have it yet
+        additional_instructions: (row as any).additional_instructions?.trim() === "" ? null : (row as any).additional_instructions
+    })); 
     currentTestSetData = currentTestSetData.filter(item => item.source_text.trim() !== "");
 
     if (currentTestSetData.length === 0) {
-        toast.error("Please provide test set data (either by manual input or a valid uploaded file).");
+        toast.error("请提供测试集数据 (手动输入或选择一个已上传的测试集). ");
         setIsLoading(false);
         return;
     }
     
+    let currentTestSetName = "Manual Input"; // Default name
+    if (testSetType === "uploaded_existing" && selectedUserTestSetId) {
+        const selectedSetMeta = userTestSetsList.find(ts => ts.id === selectedUserTestSetId);
+        if (selectedSetMeta) {
+            currentTestSetName = selectedSetMeta.test_set_name;
+        }
+    }
+    // If testSetType was "upload" (newly uploaded but not yet run), testRows would be populated by that flow.
+
     const requestBody = {
         prompt_ids: promptIds as string[],
         test_set_data: currentTestSetData,
@@ -716,7 +783,8 @@ export function EvaluationPanel({ currentLanguage }: EvaluationPanelProps) {
 
         const initialPending = new Set<string>();
         currentTestSetData.forEach((testItem, rowIndex) => {
-            const originalRowId = testRows[rowIndex]?.id || `uploaded-${rowIndex}`; // Fallback for uploaded
+            // Use the ID from testRows which should be stable if populated from uploaded set
+            const originalRowId = testRows[rowIndex]?.id;
             if (originalRowId) {
                  columns.forEach(col => {
                     if (col.selectedVersionId && promptIds.includes(col.selectedVersionId)) { 
@@ -728,43 +796,42 @@ export function EvaluationPanel({ currentLanguage }: EvaluationPanelProps) {
         setPendingOutputs(initialPending);
         console.log("Initialized pending outputs:", initialPending);
 
-    } catch (error) {
+    } catch (error: any) {
         console.error("Failed to start evaluation:", error);
-        toast.error(`启动评估失败： ${error instanceof Error ? error.message : "未知错误"}`);
+        const detail = error.response?.data?.detail || error.message || "未知错误";
+        toast.error(`启动评估失败: ${detail}`);
         setEvaluationStatus("failed");
     } finally {
         setIsLoading(false);
     }
   };
+  // --- END REINSTATE ---
 
-  // Handle adding a test row - MODIFIED
-  const handleAddTestRow = () => {
-    setTestRows([...testRows, { id: Date.now().toString(), sourceText: "", referenceText: "", additional_instructions: "" }]);
-    if (testSetType === "upload") {
-        toast.info("Switched to manual input mode. Uploaded file selection cleared.");
-    }
-    setTestSetType("manual"); 
-    setUploadedTestSetFile(null); // Clear any uploaded file selection
-    setIsUploadModalOpen(false); // Close modal if it was open for some reason
-  };
-
-  const handleDeleteTestRow = (id: string) => {
-      // Prevent deleting the last row? Optional.
-      if (testRows.length <= 1) {
-          toast.info("无法删除最后一个测试行。");
-          return;
+  // --- Fetch User's Uploaded Test Sets --- NEW
+  const fetchUserTestSets = async () => {
+    console.log("Attempting to fetch user test sets NOW..."); // DEBUG LINE
+    toast.info("Refreshing test set list..."); // DEBUG LINE
+    setIsLoadingUserTestSets(true);
+    try {
+      const data = await apiClient<UserTestSetSummary[]>('/test-sets/mine');
+      setUserTestSetsList(data || []);
+      if (data && data.length > 0) {
+        console.log("Fetched user test sets:", data.map(d => d.id));
+      } else {
+        console.log("No user test sets found or empty list returned.");
       }
-      setTestRows(testRows.filter(row => row.id !== id));
-      // TODO: Also clear any evaluation results associated with this row if needed
+    } catch (error: any) {
+      console.error("Failed to fetch user test sets:", error);
+      toast.error(`加载用户测试集列表失败: ${error.message || "未知错误"}`);
+      setUserTestSetsList([]); 
+    } finally {
+      setIsLoadingUserTestSets(false);
+    }
   };
 
-  const handleTestRowChange = (id: string, field: keyof Omit<TestRow, 'id'>, value: string) => {
-    setTestRows(prevRows =>
-      prevRows.map(row =>
-        row.id === id ? { ...row, [field]: value } : row
-      )
-    );
-  };
+  useEffect(() => {
+    fetchUserTestSets();
+  }, [currentLanguage]);
 
   // --- Handler to Save Evaluation Session --- M
   const handleSaveEvaluation = async () => {
@@ -1255,32 +1322,49 @@ export function EvaluationPanel({ currentLanguage }: EvaluationPanelProps) {
         <CardHeader>
           <CardTitle>测试数据输入</CardTitle>
           <CardDescription>
-            手动添加测试行或通过弹窗上传测试集文件。
+            选择已上传的测试集，手动添加测试行，或上传新的测试集文件。
           </CardDescription>
         </CardHeader>
-        <CardContent className="flex items-start gap-4">
-          {/* Manual Add Row Section */}
-          <div className="flex-1">
-            <h4 className="text-md font-semibold mb-2">手动添加测试行</h4>
-            <Button variant="outline" onClick={handleAddTestRow} className="w-full sm:w-auto">
-              <Plus className="mr-2 h-4 w-4" />
-              添加测试行
-            </Button>
-            {testSetType === 'upload' && uploadedTestSetFile && (
-                <p className="text-xs text-muted-foreground mt-1">
-                    当前已选择上传文件。如需手动添加，请先取消上传或清除选择。
-                </p>
-            )}
+        <CardContent className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          {/* Select Existing Test Set Section - NEW */} 
+          <div className="md:col-span-1 space-y-2">
+            <Label htmlFor="selectUserTestSet" className="font-semibold">选择已上传的测试集</Label>
+            <Select 
+              value={selectedUserTestSetId || ""}
+              onValueChange={handleSelectUserTestSet}
+              disabled={isLoadingUserTestSets || userTestSetsList.length === 0}
+            >
+              <SelectTrigger id="selectUserTestSet">
+                <SelectValue placeholder={isLoadingUserTestSets ? "加载中..." : (userTestSetsList.length === 0 ? "无可用测试集" : "选择一个测试集...")} />
+              </SelectTrigger>
+              <SelectContent>
+                {userTestSetsList.map(ts => (
+                  <SelectItem key={ts.id} value={ts.id}>
+                    {ts.test_set_name} ({ts.row_count} 行) - {new Date(ts.upload_timestamp).toLocaleDateString()}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {isLoadingUserTestSets && <p className="text-xs text-muted-foreground">正在加载测试集列表...</p>}
           </div>
 
-          {/* Upload File Section - Now a Dialog Trigger */}
-          <div className="flex-1">
-            <h4 className="text-md font-semibold mb-2">上传测试集文件 (CSV/Excel)</h4>
-            <Dialog open={isUploadModalOpen} onOpenChange={(isOpen) => { if (!isOpen) { /* Reset on close if needed */ } setIsUploadModalOpen(isOpen); }}>
+          {/* Manual Add Row Section - MODIFIED for layout */}
+          <div className="md:col-span-1 space-y-2 flex flex-col justify-end">
+            {/* <Label className="font-semibold">手动添加测试行</Label> */} 
+            <Button variant="outline" onClick={handleAddTestRow} className="w-full">
+              <Plus className="mr-2 h-4 w-4" />
+              或手动添加测试行
+            </Button>
+          </div>
+
+          {/* Upload New File Section - MODIFIED for layout */}
+          <div className="md:col-span-1 space-y-2 flex flex-col justify-end">
+            {/* <Label className="font-semibold">上传新文件</Label> */} 
+            <Dialog open={isUploadModalOpen} onOpenChange={setIsUploadModalOpen}>
               <DialogTrigger asChild>
-                <Button variant="outline" className="w-full sm:w-auto" onClick={openUploadModal}>
+                <Button variant="outline" className="w-full" onClick={openUploadModal}>
                   <Upload className="mr-2 h-4 w-4" />
-                  上传文件
+                  上传新测试集文件
                 </Button>
               </DialogTrigger>
               <DialogContent className="sm:max-w-lg">

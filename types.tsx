@@ -173,3 +173,36 @@ export type User = {
   // Add other fields if needed later (e.g., created_at)
 }
 // --- End User Type ---
+
+// --- Test Set Upload Types ---
+export interface UploadedFileInfo {
+  name: string;
+  size: number;
+  type: string;
+  fileObject: File; // The actual File object from the browser
+  headers: string[]; // Detected headers from the file
+}
+
+export interface ColumnMapping {
+  sourceTextColumn: string | null;
+  referenceTextColumn: string | null;
+  textIdColumn: string | null;
+  extraInfoColumn: string | null;
+}
+
+export interface TestSetUploadPayload {
+  testSetName: string;
+  fileName: string; // Original name of the uploaded file
+  fileType: string; // MIME type of the file
+  mappings: ColumnMapping;
+  languageCode: string; // From the user's current workspace/context
+  // The actual file content will be sent as FormData, not directly in this JSON payload.
+}
+
+// --- Backend Response Types ---
+export interface TestSetUploadResponse {
+  message: string;
+  test_set_id: string; // UUIDs are typically strings in JSON responses
+  test_set_name: string;
+}
+// --- End Backend Response Types ---

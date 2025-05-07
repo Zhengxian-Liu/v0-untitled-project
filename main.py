@@ -11,8 +11,8 @@ ENCODERS_BY_TYPE[ObjectId] = str
 ENCODERS_BY_TYPE[PyObjectId] = str
 
 from app.core.config import settings
-from app.db.client import connect_to_mongo, close_mongo_connection
-from app.routes import prompts, evaluations, evaluation_sessions
+from app.db.client import connect_to_mongo, close_mongo_connection, get_database # Import get_database
+from app.routes import prompts, evaluations, evaluation_sessions, test_sets
 from app.routes import auth # Import the auth router
 from app.routes import prompt_config
 
@@ -29,10 +29,14 @@ async def lifespan(app: FastAPI):
     # Code to run on startup
     logger.info("Application startup...")
     await connect_to_mongo()
+    # Get the database instance and attach it to the app state
+    # This makes it accessible via request.app.db in route handlers
+    app.db = await get_database() 
     yield
     # Code to run on shutdown
     logger.info("Application shutdown...")
     await close_mongo_connection()
+    app.db = None # Clear the reference on shutdown
 
 
 app = FastAPI(
@@ -74,6 +78,7 @@ app.include_router(prompts.router, prefix="/api/v1/prompts", tags=["Prompts"])
 app.include_router(evaluations.router, prefix="/api/v1/evaluations", tags=["Evaluations"])
 app.include_router(evaluation_sessions.router, prefix="/api/v1/evaluation-sessions", tags=["Evaluation Sessions"])
 app.include_router(prompt_config.router, prefix="/api/v1", tags=["Prompt Configuration"])
+app.include_router(test_sets.router)
 
 # Placeholder for future evaluation router
 # from app.routes import evaluations

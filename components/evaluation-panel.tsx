@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
+import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -11,10 +12,22 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Download, Upload, Plus, Play, Trash2, Eye, EyeOff, Settings, Loader2 } from "lucide-react"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-import type { Prompt, EvaluationResult, Evaluation } from "@/types"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+  DialogClose,
+} from "@/components/ui/dialog"
+import type { Prompt, EvaluationResult, Evaluation, UploadedFileInfo, ColumnMapping, TestSetUploadResponse } from "@/types"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { toast } from "sonner"
 import { apiClient } from "@/lib/apiClient"
+import TestSetUploadForm from './TestSetUploadForm'
+import * as XLSX from 'xlsx'
 
 // Mock data for AI models
 const mockModels = [
@@ -82,6 +95,7 @@ interface EvaluationRequestData {
 
 // --- Constant for Select placeholder value --- M
 const SELECT_PLACEHOLDER_VALUE = "--none--";
+const NOT_APPLICABLE_VALUE = "--not-applicable--"; // For mapping dropdowns
 
 export function EvaluationPanel({ currentLanguage }: EvaluationPanelProps) {
   const [selectedProject, setSelectedProject] = useState("genshin")
@@ -89,6 +103,9 @@ export function EvaluationPanel({ currentLanguage }: EvaluationPanelProps) {
   const [testSetType, setTestSetType] = useState("manual") // Default to manual row input
   const [selectedTestSet, setSelectedTestSet] = useState("1")
   const [isLoading, setIsLoading] = useState(false)
+
+  // State for modal visibility - NEW
+  const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
 
   // --- Update Initial Columns State --- M
   const [columns, setColumns] = useState<EvaluationColumn[]>([
@@ -136,6 +153,21 @@ export function EvaluationPanel({ currentLanguage }: EvaluationPanelProps) {
   // --- Add Polling State --- M
   const [pollingIntervalId, setPollingIntervalId] = useState<NodeJS.Timeout | null>(null);
   // --- End Polling State ---
+
+  // --- State for uploaded test set file --- NEW
+  const [uploadedTestSetFile, setUploadedTestSetFile] = useState<UploadedFileInfo | null>(null);
+  const [isParsingHeaders, setIsParsingHeaders] = useState(false);
+  
+  // NEW states for mapping UI
+  const [modalStep, setModalStep] = useState<'fileSelection' | 'columnMapping'>('fileSelection');
+  const [columnMappings, setColumnMappings] = useState<ColumnMapping>({
+    sourceTextColumn: null,
+    referenceTextColumn: null,
+    textIdColumn: null,
+    extraInfoColumn: null,
+  });
+  const [testSetName, setTestSetName] = useState<string>("");
+  // --- End State ---
 
   // --- Fetch Prompts Effect --- M
   useEffect(() => {
@@ -480,12 +512,144 @@ export function EvaluationPanel({ currentLanguage }: EvaluationPanelProps) {
   }, [currentEvaluationId, evaluationStatus, judgeStatus]);
   // --- End Polling Effect ---
 
+  // --- Function to parse file headers --- NEW
+  const parseFileHeaders = async (file: File): Promise<string[]> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        try {
+          const data = e.target?.result;
+          const workbook = XLSX.read(data, { type: 'array' });
+          const firstSheetName = workbook.SheetNames[0];
+          const worksheet = workbook.Sheets[firstSheetName];
+          const jsonData: any[][] = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: '' });
+          if (jsonData.length > 0) {
+            const headers = jsonData[0].map(String).filter(h => h.trim() !== '');
+            resolve(headers);
+          } else {
+            resolve([]);
+          }
+        } catch (error) {
+          console.error("Error parsing file headers:", error);
+          reject(error instanceof Error ? error.message : "Unknown error during header parsing");
+        }
+      };
+      reader.onerror = (error) => {
+        console.error("FileReader error:", error);
+        reject("Error reading file");
+      };
+      reader.readAsArrayBuffer(file);
+    });
+  };
+  // --- End Parse File Headers ---
+
+  // --- Handler for when a test set file is selected --- MODIFIED
+  const handleTestSetFileSelected = async (fileInfo: UploadedFileInfo | null) => {
+    // Reset states relevant to a new file upload attempt
+    setUploadedTestSetFile(null);
+    setIsParsingHeaders(false);
+    setModalStep('fileSelection'); // Ensure we are on the file selection step
+    setColumnMappings({ sourceTextColumn: null, referenceTextColumn: null, textIdColumn: null, extraInfoColumn: null });
+    setTestSetName("");
+
+    if (fileInfo && fileInfo.fileObject) {
+      setIsParsingHeaders(true);
+      try {
+        const headers = await parseFileHeaders(fileInfo.fileObject);
+        const updatedFileInfo = { ...fileInfo, headers };
+        setUploadedTestSetFile(updatedFileInfo);
+        setTestSetName(updatedFileInfo.name.split('.')[0]); // Pre-fill test set name from filename
+        toast.success(`文件已选择: ${updatedFileInfo.name}. 表头已解析.`);
+        setTestSetType("upload"); 
+        setTestRows([]); 
+      } catch (error) {
+        toast.error(`解析表头失败: ${error}`);
+        // No need to setUploadedTestSetFile(null) here as it's already cleared
+      } finally {
+        setIsParsingHeaders(false);
+      }
+    } else {
+      // File was deselected or no file object
+    }
+  };
+  // --- End Handler ---
+
+  const handleProceedToMapping = () => {
+    if (!uploadedTestSetFile || !uploadedTestSetFile.headers || uploadedTestSetFile.headers.length === 0) {
+        toast.info("请选择文件并确保表头已正确解析。");
+        return;
+    }
+    setModalStep('columnMapping');
+  };
+
+  const handleMappingChange = (field: keyof ColumnMapping, value: string | null) => {
+    setColumnMappings(prev => ({ ...prev, [field]: value === NOT_APPLICABLE_VALUE ? null : value }));
+  };
+
+  const handleSaveTestSet = async () => {
+    if (!testSetName.trim()) {
+      toast.error("请输入测试集名称。");
+      return;
+    }
+    if (!columnMappings.sourceTextColumn) {
+      toast.error("请为源文本映射一个列。");
+      return;
+    }
+    if (!uploadedTestSetFile || !uploadedTestSetFile.fileObject) {
+      toast.error("未找到上传的文件对象。");
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append('file', uploadedTestSetFile.fileObject);
+    formData.append('test_set_name', testSetName.trim());
+    formData.append('language_code', currentLanguage); 
+    formData.append('mappings', JSON.stringify(columnMappings));
+    formData.append('original_file_name', uploadedTestSetFile.name);
+    formData.append('file_type', uploadedTestSetFile.type);
+
+    // TODO: Add loading state for the save button (e.g., setIsSaving(true))
+    try {
+      // UNCOMMENTED ACTUAL API CALL:
+      const savedTestData = await apiClient<TestSetUploadResponse>( 
+        '/test-sets/upload', // Corrected path: Removed leading /api/v1
+        {
+          method: 'POST',
+          body: formData,
+          // apiClient might handle Content-Type for FormData automatically,
+          // but if not, you might need to explicitly set it or ensure it's not set to application/json
+        }
+      );
+      
+      toast.success(savedTestData.message || `测试集 "${savedTestData.test_set_name}" 已成功上传并处理。`);
+      setIsUploadModalOpen(false); 
+      
+      // TODO: Refresh list of user-uploaded test sets.
+      // e.g., fetchUserTestSets(); 
+
+    } catch (error: any) {
+      console.error("Failed to save test set:", error);
+      const detail = error.response?.data?.detail || error.message || "发生未知错误";
+      toast.error(`保存测试集失败: ${detail}`);
+    } finally {
+      // TODO: Reset loading state (e.g., setIsSaving(false))
+    }
+  };
+
+  const openUploadModal = () => {
+    // Reset all modal-specific states when opening fresh
+    setModalStep('fileSelection');
+    setUploadedTestSetFile(null);
+    setIsParsingHeaders(false);
+    setColumnMappings({ sourceTextColumn: null, referenceTextColumn: null, textIdColumn: null, extraInfoColumn: null });
+    setTestSetName("");
+    setIsUploadModalOpen(true);
+  };
+
   // Handle running evaluation
   const handleRunEvaluation = async () => {
     setIsLoading(true);
-    // Reset completion flag for new run
     setIsCompletionToastShown(false); 
-    // --- Clear previous results and pending state --- M
     setEvaluationResults([]);
     setPendingOutputs(new Set());
     setCurrentEvaluationId(null);
@@ -499,23 +663,43 @@ export function EvaluationPanel({ currentLanguage }: EvaluationPanelProps) {
       return;
     }
 
-    let testSetData: EvaluationRequestData[] = testRows.map(row => ({
+    let currentTestSetData: EvaluationRequestData[] = [];
+    let currentTestSetName: string = "Manual Input";
+
+    if (testSetType === 'upload' && uploadedTestSetFile) {
+      // TODO: Replace this with actual parsed data from uploadedTestSetFile + mappings
+      // This is a placeholder until parsing and mapping are done.
+      toast.info("Running evaluation with an uploaded file is not fully implemented. Using placeholder data or manual rows if available.");
+      // If you have a temporary way to get data from uploadedTestSetFile, use it here.
+      // Otherwise, it might fall back to empty or manual testRows.
+      // For demonstration, let's assume testRows might have been populated by a parsed file (not yet implemented)
+      currentTestSetData = testRows.map(row => ({
         source_text: row.sourceText,
         reference_text: row.referenceText.trim() === "" ? null : row.referenceText,
-        additional_instructions: row.additional_instructions.trim() === "" ? null : row.additional_instructions
-    }));
-    testSetData = testSetData.filter(item => item.source_text.trim() !== "");
+        // additional_instructions: row.additional_instructions.trim() === "" ? null : row.additional_instructions
+      })); // Adapt if 'additional_instructions' exists in your uploaded file structure
+      currentTestSetName = uploadedTestSetFile.name;
 
-    if (testSetData.length === 0) {
-        toast.error("请提供测试集数据（手动输入）。");
+    } else { // Manual input
+      currentTestSetData = testRows.map(row => ({
+        source_text: row.sourceText,
+        reference_text: row.referenceText.trim() === "" ? null : row.referenceText,
+        // additional_instructions: row.additional_instructions.trim() === "" ? null : row.additional_instructions
+      })); 
+    }
+    
+    currentTestSetData = currentTestSetData.filter(item => item.source_text.trim() !== "");
+
+    if (currentTestSetData.length === 0) {
+        toast.error("Please provide test set data (either by manual input or a valid uploaded file).");
         setIsLoading(false);
         return;
     }
-
+    
     const requestBody = {
-        prompt_ids: promptIds,
-        test_set_data: testSetData,
-        test_set_name: "Manual Input"
+        prompt_ids: promptIds as string[],
+        test_set_data: currentTestSetData,
+        test_set_name: currentTestSetName
     };
 
     console.log("Evaluation Request Body:", requestBody);
@@ -525,22 +709,17 @@ export function EvaluationPanel({ currentLanguage }: EvaluationPanelProps) {
             method: "POST",
             body: JSON.stringify(requestBody),
         });
-        // --- Use returned data directly --- M
         console.log("Evaluation started:", evaluationData);
         setCurrentEvaluationId(evaluationData.id);
         setEvaluationStatus(evaluationData.status);
         toast.success(`评估 ${evaluationData.id} 已成功开始！`);
-        // --- End Use ---
 
-        // --- ADDED: Populate pendingOutputs --- M
         const initialPending = new Set<string>();
-        // Use the filtered testSetData that was actually sent
-        testSetData.forEach((testItem, rowIndex) => {
-            // Find the original row ID (assuming testRows order matches testSetData)
-            const originalRowId = testRows.find(r => r.sourceText === testItem.source_text)?.id;
+        currentTestSetData.forEach((testItem, rowIndex) => {
+            const originalRowId = testRows[rowIndex]?.id || `uploaded-${rowIndex}`; // Fallback for uploaded
             if (originalRowId) {
-                 columns.forEach(col => { // Iterate through columns with selected versions
-                    if (col.selectedVersionId && promptIds.includes(col.selectedVersionId)) { // Ensure the column was part of the request
+                 columns.forEach(col => {
+                    if (col.selectedVersionId && promptIds.includes(col.selectedVersionId)) { 
                         initialPending.add(`${originalRowId}-${col.id}`);
                     }
                  });
@@ -548,7 +727,6 @@ export function EvaluationPanel({ currentLanguage }: EvaluationPanelProps) {
         });
         setPendingOutputs(initialPending);
         console.log("Initialized pending outputs:", initialPending);
-        // --- End Populate --- M
 
     } catch (error) {
         console.error("Failed to start evaluation:", error);
@@ -559,9 +737,15 @@ export function EvaluationPanel({ currentLanguage }: EvaluationPanelProps) {
     }
   };
 
-  // Handle adding a test row
+  // Handle adding a test row - MODIFIED
   const handleAddTestRow = () => {
     setTestRows([...testRows, { id: Date.now().toString(), sourceText: "", referenceText: "", additional_instructions: "" }]);
+    if (testSetType === "upload") {
+        toast.info("Switched to manual input mode. Uploaded file selection cleared.");
+    }
+    setTestSetType("manual"); 
+    setUploadedTestSetFile(null); // Clear any uploaded file selection
+    setIsUploadModalOpen(false); // Close modal if it was open for some reason
   };
 
   const handleDeleteTestRow = (id: string) => {
@@ -1066,12 +1250,151 @@ export function EvaluationPanel({ currentLanguage }: EvaluationPanelProps) {
         </CardContent>
       </Card>
 
-      {/* Bottom Action Buttons */}
-      <div className="flex justify-end gap-2">
-        <Button variant="outline" onClick={handleAddTestRow}>
-          <Plus className="mr-2 h-4 w-4" />
-          添加测试行
-        </Button>
+      {/* Bottom Action Buttons & Test Set Input - MODIFIED */}
+      <Card className="mt-6">
+        <CardHeader>
+          <CardTitle>测试数据输入</CardTitle>
+          <CardDescription>
+            手动添加测试行或通过弹窗上传测试集文件。
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="flex items-start gap-4">
+          {/* Manual Add Row Section */}
+          <div className="flex-1">
+            <h4 className="text-md font-semibold mb-2">手动添加测试行</h4>
+            <Button variant="outline" onClick={handleAddTestRow} className="w-full sm:w-auto">
+              <Plus className="mr-2 h-4 w-4" />
+              添加测试行
+            </Button>
+            {testSetType === 'upload' && uploadedTestSetFile && (
+                <p className="text-xs text-muted-foreground mt-1">
+                    当前已选择上传文件。如需手动添加，请先取消上传或清除选择。
+                </p>
+            )}
+          </div>
+
+          {/* Upload File Section - Now a Dialog Trigger */}
+          <div className="flex-1">
+            <h4 className="text-md font-semibold mb-2">上传测试集文件 (CSV/Excel)</h4>
+            <Dialog open={isUploadModalOpen} onOpenChange={(isOpen) => { if (!isOpen) { /* Reset on close if needed */ } setIsUploadModalOpen(isOpen); }}>
+              <DialogTrigger asChild>
+                <Button variant="outline" className="w-full sm:w-auto" onClick={openUploadModal}>
+                  <Upload className="mr-2 h-4 w-4" />
+                  上传文件
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="sm:max-w-lg">
+                <DialogHeader>
+                  <DialogTitle>
+                    {modalStep === 'fileSelection' ? '上传测试集文件' : '映射列并保存测试集'}
+                  </DialogTitle>
+                  <DialogDescription>
+                    {modalStep === 'fileSelection' ? 
+                      '选择一个 CSV 或 Excel 文件。文件中的第一行应为表头。' : 
+                      '将文件中的列映射到标准字段，并为测试集命名。'}
+                  </DialogDescription>
+                </DialogHeader>
+                
+                {modalStep === 'fileSelection' && (
+                  <div className="py-4 space-y-4">
+                    <TestSetUploadForm onFileSelect={handleTestSetFileSelected} />
+                    {isParsingHeaders && (
+                      <div className="flex items-center text-sm text-muted-foreground">
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />正在解析文件头...
+                      </div>
+                    )}
+                    {uploadedTestSetFile && !isParsingHeaders && (
+                      <div className="p-3 border rounded-md text-sm bg-muted/10 space-y-1">
+                        <p className="font-semibold">已选文件:</p>
+                        <p>名称: {uploadedTestSetFile.name}</p>
+                        <p>大小: {(uploadedTestSetFile.size / 1024).toFixed(2)} KB</p>
+                        {uploadedTestSetFile.headers.length > 0 ? (
+                          <p>检测到的表头: <span className="font-mono bg-background p-1 rounded-sm text-xs">{uploadedTestSetFile.headers.join(', ')}</span></p>
+                        ) : (
+                          <p className="text-destructive">未能检测到表头或文件为空。</p>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {modalStep === 'columnMapping' && uploadedTestSetFile && (
+                  <div className="py-4 space-y-4">
+                    <div>
+                      <Label htmlFor="testSetNameInput" className="font-semibold">测试集名称 <span className="text-red-500">*</span></Label>
+                      <Input 
+                        id="testSetNameInput" 
+                        value={testSetName} 
+                        onChange={(e) => setTestSetName(e.target.value)} 
+                        placeholder="例如：游戏章节1对话"
+                        className="mt-1"
+                      />
+                    </div>
+                    <p className="text-sm font-semibold">列映射:</p>
+                    {[ 
+                      { field: 'sourceTextColumn', label: '源文本 (Source Text)', required: true },
+                      { field: 'referenceTextColumn', label: '参考译文 (Reference)', required: false },
+                      { field: 'textIdColumn', label: '文本ID (Text ID)', required: false },
+                      { field: 'extraInfoColumn', label: '额外信息 (Extra Info)', required: false },
+                    ].map(mapItem => (
+                      <div key={mapItem.field}>
+                        <Label htmlFor={`map-${mapItem.field}`} className="text-sm">
+                          {mapItem.label} {mapItem.required && <span className="text-red-500">*</span>}
+                        </Label>
+                        <Select 
+                          value={columnMappings[mapItem.field as keyof ColumnMapping] || NOT_APPLICABLE_VALUE}
+                          onValueChange={(value) => handleMappingChange(mapItem.field as keyof ColumnMapping, value)}
+                        >
+                          <SelectTrigger id={`map-${mapItem.field}`} className="mt-1 w-full">
+                            <SelectValue placeholder="选择列..." />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {!mapItem.required && <SelectItem value={NOT_APPLICABLE_VALUE}>--- 不适用 ---</SelectItem>}
+                            {uploadedTestSetFile.headers.map(header => (
+                              <SelectItem key={header} value={header}>{header}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                <DialogFooter>
+                  {modalStep === 'fileSelection' ? (
+                    <>
+                      <DialogClose asChild><Button type="button" variant="outline">取消</Button></DialogClose>
+                      <Button 
+                        type="button" 
+                        onClick={handleProceedToMapping} 
+                        disabled={!uploadedTestSetFile || uploadedTestSetFile.headers.length === 0 || isParsingHeaders}
+                      >
+                        {isParsingHeaders ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                        {isParsingHeaders ? '解析中...' : '下一步: 映射列'}
+                      </Button>
+                    </>
+                  ) : (
+                    <>
+                      <Button type="button" variant="outline" onClick={() => setModalStep('fileSelection')}>返回</Button>
+                      <Button 
+                        type="button" 
+                        onClick={handleSaveTestSet}
+                        disabled={!testSetName.trim() || !columnMappings.sourceTextColumn}
+                      >
+                        保存测试集
+                      </Button>
+                    </>
+                  )}
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+           {/* ... rest of the component ... */}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Original Bottom Action Buttons - now mostly for overall actions */}
+      <div className="flex justify-end gap-2 mt-6">
         <Button variant="outline">
           <Download className="mr-2 h-4 w-4" />
           导出结果

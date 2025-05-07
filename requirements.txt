@@ -12,6 +12,8 @@ python-multipart
 python-jose[cryptography]
 # --- End Auth --- M
 
-# For optional CSV/Excel upload later
-# pandas
-# openpyxl 
+# For optional CSV/Excel upload later (backend processing if chosen)
+pandas
+openpyxl
+
+# xlsx was incorrectly added here; it's a frontend JS library, not a Python package. 

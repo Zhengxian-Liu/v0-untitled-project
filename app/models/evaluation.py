@@ -19,6 +19,17 @@ class EvaluationResultBase(BaseModel):
     score: Optional[int] = Field(None, ge=1, le=5, description="Manual score assigned (e.g., 1-5).")
     comment: Optional[str] = Field(None, max_length=1000, description="User comments or feedback.")
 
+    # --- LLM Judge Fields ---
+    llm_judge_score: Optional[float] = Field(None, description="Score assigned by the LLM judge.")
+    llm_judge_rationale: Optional[str] = Field(None, description="Rationale provided by the LLM judge.")
+    llm_judge_model_id: Optional[str] = Field(None, description="Model ID used for LLM judging.")
+    # --- Sent Prompt Fields ---
+    sent_system_prompt: Optional[str] = Field(None, description="The exact system prompt sent to the LLM.")
+    sent_user_prompt: Optional[str] = Field(None, description="The exact user prompt sent to the LLM.")
+    prompt_token_count: Optional[int] = Field(None, description="Approximate token count of the sent prompt.")
+    # --- End Sent Prompt Fields ---
+    # --- End LLM Judge Fields ---
+
 class EvaluationResultCreate(EvaluationResultBase):
     """Properties needed to create an evaluation result (internal use)."""
     # Initially created without score/comment
@@ -76,7 +87,7 @@ class EvaluationRequestData(BaseModel):
     """Structure for individual items in the test set data."""
     source_text: str
     reference_text: Optional[str] = None
-    # Add other optional fields like text_id, extra_info if needed from PRD FR-EV-03
+    additional_instructions: Optional[str] = Field(None, description="Specific instructions for this test item.")
     # text_id: Optional[str] = None
     # extra_info: Optional[dict] = None
 
@@ -91,6 +102,12 @@ class EvaluationBase(BaseModel):
     prompt_ids: List[PyObjectId] = Field(..., description="List of Prompt version IDs evaluated in this session.")
     test_set_name: Optional[str] = Field(None, description="Name of the test set used, if provided.")
     status: str = Field(default="pending", description="Status of the evaluation (e.g., pending, running, completed, failed).")
+    user_id: Optional[PyObjectId] = Field(None, description="ID of the user who initiated the evaluation.")
+
+    # --- LLM Judge Status Fields ---
+    judge_status: Optional[str] = Field(None, description="Status of the LLM judging process (e.g., not_started, pending, completed, failed).")
+    judged_at: Optional[datetime] = Field(None, description="Timestamp when LLM judging completed.")
+    # --- End LLM Judge Status Fields ---
 
 class EvaluationInDB(EvaluationBase):
     """Model representing an evaluation session stored in MongoDB."""
@@ -123,4 +140,6 @@ class Evaluation(EvaluationInDB):
     model_config = ConfigDict(
         # Pydantic v2 way to exclude fields from serialization
         fields={'test_set_data': {'exclude': True}}
-    ) 
+    )
+
+# --- REMOVED: Status Response Model --- M 

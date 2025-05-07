@@ -12,12 +12,15 @@ ENCODERS_BY_TYPE[PyObjectId] = str
 
 from app.core.config import settings
 from app.db.client import connect_to_mongo, close_mongo_connection
-from app.routes import prompts, evaluations # Import the evaluations router
-from app.routes import evaluation_sessions # Import the new router
+from app.routes import prompts, evaluations, evaluation_sessions
+from app.routes import auth # Import the auth router
+from app.routes import prompt_config
 
 # Configure logging
 logging.basicConfig(level=settings.logging_level,
                     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+# Set pymongo logger level higher to reduce verbosity
+logging.getLogger("pymongo").setLevel(logging.WARNING)
 logger = logging.getLogger(__name__)
 
 
@@ -45,6 +48,7 @@ app = FastAPI(
 origins = [
     "http://localhost:3000",
     "http://127.0.0.1:3000",
+    "https://c95c-111-246-80-120.ngrok-free.app",
     # Add any other origins if needed
     # "*" # Allows all origins (use with caution, less secure)
 ]
@@ -65,11 +69,11 @@ async def ping():
 
 
 # Include the routers
+app.include_router(auth.router, prefix="/api/v1/auth", tags=["Authentication"]) # Add Auth router
 app.include_router(prompts.router, prefix="/api/v1/prompts", tags=["Prompts"])
 app.include_router(evaluations.router, prefix="/api/v1/evaluations", tags=["Evaluations"])
-# --- Add Session Router ---
 app.include_router(evaluation_sessions.router, prefix="/api/v1/evaluation-sessions", tags=["Evaluation Sessions"])
-# --- End Add ---
+app.include_router(prompt_config.router, prefix="/api/v1", tags=["Prompt Configuration"])
 
 # Placeholder for future evaluation router
 # from app.routes import evaluations

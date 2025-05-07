@@ -3,8 +3,21 @@
 import { useState, useEffect } from 'react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
-import { toast } from "sonner";
+import { useToast } from "@/components/ui/use-toast" // Using Shadcn toast
 import { Eye, Trash2, Loader2 } from 'lucide-react'; // Icons for actions and Loader2
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog" // ADDED: Alert Dialog
+
+import { apiClient } from "@/lib/apiClient"; // Import helper
 
 // Import the summary type we expect from the API
 import type { EvaluationSessionSummary, EvaluationSession } from "@/types";
@@ -15,6 +28,7 @@ export function SavedSessionsList() {
     const [sessions, setSessions] = useState<EvaluationSessionSummary[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const { toast } = useToast() // ADDED: Shadcn toast hook
 
     // --- State for View Modal --- M
     const [selectedSessionDetails, setSelectedSessionDetails] = useState<EvaluationSession | null>(null);
@@ -22,38 +36,35 @@ export function SavedSessionsList() {
     const [isLoadingDetails, setIsLoadingDetails] = useState(false);
     // --- End State ---
 
+    // --- Refactored fetchSessions --- M
+    const fetchSessions = async () => {
+        setIsLoading(true);
+        setError(null);
+        try {
+            const data = await apiClient<EvaluationSessionSummary[]>('/evaluation-sessions/');
+            if (Array.isArray(data)) {
+                 setSessions(data as EvaluationSessionSummary[]);
+            } else {
+                throw new Error("Invalid data format received from API");
+            }
+        } catch (err) {
+            console.error("Failed to fetch saved sessions:", err);
+            const errorMsg = err instanceof Error ? err.message : "An unknown error occurred";
+            setError(errorMsg);
+            toast({ // Use Shadcn toast
+                 title: "Failed to Load Sessions",
+                 description: errorMsg,
+                 variant: "destructive"
+             });
+        } finally {
+            setIsLoading(false);
+        }
+    };
+    // --- End Refactor ---
+
     // Fetch saved sessions from the API on component mount
     useEffect(() => {
-        const fetchSessions = async () => {
-            setIsLoading(true);
-            setError(null);
-            try {
-                const response = await fetch("http://localhost:8000/api/v1/evaluation-sessions/");
-                if (!response.ok) {
-                    let errorDetail = `HTTP error! status: ${response.status}`;
-                    try {
-                        const errorData = await response.json();
-                        errorDetail = errorData.detail || errorDetail;
-                    } catch (e) { /* Ignore JSON parsing error */ }
-                    throw new Error(errorDetail);
-                }
-                const data = await response.json();
-                // Ensure data matches expected type (basic check)
-                if (Array.isArray(data)) {
-                     setSessions(data as EvaluationSessionSummary[]);
-                } else {
-                    throw new Error("Invalid data format received from API");
-                }
-            } catch (err) {
-                console.error("Failed to fetch saved sessions:", err);
-                const errorMsg = err instanceof Error ? err.message : "An unknown error occurred";
-                setError(errorMsg);
-                toast.error(`Failed to load saved sessions: ${errorMsg}`);
-            } finally {
-                setIsLoading(false);
-            }
-        };
-
+        console.log("SavedSessionsList: Fetching from URL:");
         fetchSessions();
     }, []); // Run once on mount
 
@@ -64,38 +75,47 @@ export function SavedSessionsList() {
         setSelectedSessionDetails(null); // Clear previous
         setIsViewModalOpen(false); // Close initially
         try {
-            const response = await fetch(`http://localhost:8000/api/v1/evaluation-sessions/${sessionId}`);
-            if (!response.ok) {
-                 let errorDetail = `HTTP error! status: ${response.status}`;
-                 try {
-                     const errorData = await response.json();
-                     errorDetail = errorData.detail || errorDetail;
-                 } catch (e) { /* Ignore */ }
-                 throw new Error(errorDetail);
-            }
-            const data = await response.json();
+            // --- Use apiClient --- M
+            const data = await apiClient<EvaluationSession>(`/evaluation-sessions/${sessionId}`);
+            // --- End Use --- M
             setSelectedSessionDetails(data as EvaluationSession);
             setIsViewModalOpen(true); // Open modal with fetched data
 
         } catch (err) {
              console.error("Failed to fetch session details:", err);
              const errorMsg = err instanceof Error ? err.message : "An unknown error occurred";
-             toast.error(`Failed to load session details: ${errorMsg}`);
+             toast({ // Use Shadcn toast
+                title: "Failed to Load Session Details",
+                description: errorMsg,
+                variant: "destructive"
+             });
         } finally {
             setIsLoadingDetails(false);
         }
     };
     // --- End Update ---
 
+    // --- MODIFIED Delete Handler --- M
     const handleDeleteSession = async (sessionId: string) => {
-        // TODO: Implement API call to DELETE /api/v1/evaluation-sessions/{sessionId}
         console.log("Delete session clicked:", sessionId);
-        if (confirm(`Are you sure you want to delete saved session ${sessionId}?`)) {
-             toast.warning(`Deleting session ${sessionId} (Not Implemented Yet)`);
-             // After successful deletion, refetch the list:
-             // fetchSessions();
+        try {
+          await apiClient(`/evaluation-sessions/${sessionId}`, { method: 'DELETE' });
+          toast({
+               title: "Session Deleted",
+               description: `Saved session ${sessionId} deleted successfully.`
+          });
+          fetchSessions(); // Refresh the list
+        } catch (err) {
+             console.error("Failed to delete session:", err);
+             const errorMsg = err instanceof Error ? err.message : "An unknown error occurred";
+             toast({
+                title: "Error Deleting Session",
+                description: errorMsg,
+                variant: "destructive"
+             });
         }
     };
+    // --- End MODIFIED Delete Handler ---
 
     if (isLoading) {
         return <div>Loading saved sessions...</div>;
@@ -141,15 +161,37 @@ export function SavedSessionsList() {
                                                 <Eye className="h-4 w-4" />
                                             )}
                                         </Button>
-                                        <Button
-                                            variant="ghost"
-                                            size="icon"
-                                            onClick={() => handleDeleteSession(session.id)}
-                                            title="Delete Session"
-                                            className="h-8 w-8 text-destructive hover:text-destructive"
-                                            >
-                                            <Trash2 className="h-4 w-4" />
-                                        </Button>
+                                        {/* --- ADDED Delete Dialog --- M */}
+                                        <AlertDialog>
+                                            <AlertDialogTrigger asChild>
+                                                <Button
+                                                    variant="ghost"
+                                                    size="icon"
+                                                    title="Delete Session"
+                                                    className="h-8 w-8 text-destructive hover:text-destructive"
+                                                >
+                                                    <Trash2 className="h-4 w-4" />
+                                                </Button>
+                                            </AlertDialogTrigger>
+                                            <AlertDialogContent>
+                                                <AlertDialogHeader>
+                                                    <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+                                                    <AlertDialogDescription>
+                                                        This action will permanently delete the saved session <code className="mx-1 font-mono bg-muted px-1 rounded">{session.session_name}</code> (ID: {session.id}). This cannot be undone.
+                                                    </AlertDialogDescription>
+                                                </AlertDialogHeader>
+                                                <AlertDialogFooter>
+                                                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                                    <AlertDialogAction
+                                                         onClick={() => handleDeleteSession(session.id)}
+                                                         className="bg-destructive hover:bg-destructive/90 text-destructive-foreground"
+                                                     >
+                                                        Delete Permanently
+                                                    </AlertDialogAction>
+                                                </AlertDialogFooter>
+                                            </AlertDialogContent>
+                                        </AlertDialog>
+                                        {/* --- End Delete Dialog --- */}
                                     </TableCell>
                                 </TableRow>
                             ))

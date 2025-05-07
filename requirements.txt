@@ -6,6 +6,12 @@ pydantic[email]
 pydantic-settings
 python-dotenv
 
+# --- Auth Dependencies --- M
+passlib[bcrypt]
+python-multipart
+python-jose[cryptography]
+# --- End Auth --- M
+
 # For optional CSV/Excel upload later
 # pandas
 # openpyxl 

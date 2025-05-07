@@ -2,6 +2,7 @@ import motor.motor_asyncio
 import logging
 import asyncio
 from app.core.config import settings
+from bson import UuidRepresentation
 
 logger = logging.getLogger(__name__)
 
@@ -22,7 +23,8 @@ async def connect_to_mongo():
         try:
             mongo_db.client = motor.motor_asyncio.AsyncIOMotorClient(
                 settings.mongo_url,
-                serverSelectionTimeoutMS=5000
+                serverSelectionTimeoutMS=5000,
+                uuidRepresentation='standard'
             )
             # Extract database name from MONGO_URL or set a default
             db_name = settings.mongo_url.split("/")[-1].split("?")[0]

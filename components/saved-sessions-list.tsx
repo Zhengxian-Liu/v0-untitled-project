@@ -45,14 +45,14 @@ export function SavedSessionsList() {
             if (Array.isArray(data)) {
                  setSessions(data as EvaluationSessionSummary[]);
             } else {
-                throw new Error("Invalid data format received from API");
+                throw new Error("从API接收到的数据格式无效");
             }
         } catch (err) {
-            console.error("Failed to fetch saved sessions:", err);
-            const errorMsg = err instanceof Error ? err.message : "An unknown error occurred";
+            console.error("获取已保存的会话失败:", err);
+            const errorMsg = err instanceof Error ? err.message : "发生未知错误";
             setError(errorMsg);
             toast({ // Use Shadcn toast
-                 title: "Failed to Load Sessions",
+                 title: "加载会话失败",
                  description: errorMsg,
                  variant: "destructive"
              });
@@ -82,10 +82,10 @@ export function SavedSessionsList() {
             setIsViewModalOpen(true); // Open modal with fetched data
 
         } catch (err) {
-             console.error("Failed to fetch session details:", err);
-             const errorMsg = err instanceof Error ? err.message : "An unknown error occurred";
+             console.error("获取会话详细信息失败:", err);
+             const errorMsg = err instanceof Error ? err.message : "发生未知错误";
              toast({ // Use Shadcn toast
-                title: "Failed to Load Session Details",
+                title: "加载会话详细信息失败",
                 description: errorMsg,
                 variant: "destructive"
              });
@@ -101,15 +101,15 @@ export function SavedSessionsList() {
         try {
           await apiClient(`/evaluation-sessions/${sessionId}`, { method: 'DELETE' });
           toast({
-               title: "Session Deleted",
-               description: `Saved session ${sessionId} deleted successfully.`
+               title: "会话已删除",
+               description: `已保存的会话 ${sessionId} 已成功删除。`
           });
           fetchSessions(); // Refresh the list
         } catch (err) {
-             console.error("Failed to delete session:", err);
-             const errorMsg = err instanceof Error ? err.message : "An unknown error occurred";
+             console.error("删除会话失败:", err);
+             const errorMsg = err instanceof Error ? err.message : "发生未知错误";
              toast({
-                title: "Error Deleting Session",
+                title: "删除会话时出错",
                 description: errorMsg,
                 variant: "destructive"
              });
@@ -118,11 +118,11 @@ export function SavedSessionsList() {
     // --- End MODIFIED Delete Handler ---
 
     if (isLoading) {
-        return <div>Loading saved sessions...</div>;
+        return <div>正在加载已保存的会话...</div>;
     }
 
     if (error) {
-        return <div className="text-red-500">Error loading saved sessions: {error}</div>;
+        return <div className="text-red-500">加载已保存的会话时出错: {error}</div>;
     }
 
     return (
@@ -131,10 +131,10 @@ export function SavedSessionsList() {
                 <Table>
                     <TableHeader>
                         <TableRow>
-                            <TableHead>Session Name</TableHead>
-                            <TableHead>Description</TableHead>
-                            <TableHead>Saved At</TableHead>
-                            <TableHead className="text-right">Actions</TableHead>
+                            <TableHead>会话名称</TableHead>
+                            <TableHead>描述</TableHead>
+                            <TableHead>保存于</TableHead>
+                            <TableHead className="text-right">操作</TableHead>
                         </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -151,7 +151,7 @@ export function SavedSessionsList() {
                                             variant="ghost"
                                             size="icon"
                                             onClick={() => handleViewSession(session.id)}
-                                            title="View Details"
+                                            title="查看详情"
                                             className="mr-1 h-8 w-8"
                                             disabled={isLoadingDetails && selectedSessionDetails?.id === session.id} // Disable button while loading *this* session
                                             >
@@ -167,7 +167,7 @@ export function SavedSessionsList() {
                                                 <Button
                                                     variant="ghost"
                                                     size="icon"
-                                                    title="Delete Session"
+                                                    title="删除会话"
                                                     className="h-8 w-8 text-destructive hover:text-destructive"
                                                 >
                                                     <Trash2 className="h-4 w-4" />
@@ -175,18 +175,18 @@ export function SavedSessionsList() {
                                             </AlertDialogTrigger>
                                             <AlertDialogContent>
                                                 <AlertDialogHeader>
-                                                    <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+                                                    <AlertDialogTitle>您确定吗？</AlertDialogTitle>
                                                     <AlertDialogDescription>
-                                                        This action will permanently delete the saved session <code className="mx-1 font-mono bg-muted px-1 rounded">{session.session_name}</code> (ID: {session.id}). This cannot be undone.
+                                                        此操作将永久删除已保存的会话 <code className="mx-1 font-mono bg-muted px-1 rounded">{session.session_name}</code> (ID: {session.id})。此操作无法撤销。
                                                     </AlertDialogDescription>
                                                 </AlertDialogHeader>
                                                 <AlertDialogFooter>
-                                                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                                    <AlertDialogCancel>取消</AlertDialogCancel>
                                                     <AlertDialogAction
                                                          onClick={() => handleDeleteSession(session.id)}
                                                          className="bg-destructive hover:bg-destructive/90 text-destructive-foreground"
                                                      >
-                                                        Delete Permanently
+                                                        永久删除
                                                     </AlertDialogAction>
                                                 </AlertDialogFooter>
                                             </AlertDialogContent>
@@ -198,7 +198,7 @@ export function SavedSessionsList() {
                         ) : (
                             <TableRow>
                                 <TableCell colSpan={4} className="text-center text-muted-foreground">
-                                    No saved evaluation sessions found.
+                                    未找到已保存的评估会话。
                                 </TableCell>
                             </TableRow>
                         )}

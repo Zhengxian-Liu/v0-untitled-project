@@ -30,17 +30,17 @@ const mockResults: ResultItem[] = [
     outputs: [
       {
         promptId: "1",
-        promptName: "Technical Documentation Translation",
+        promptName: "技术文档翻译",
         text: "ソフトウェアアップデートには、重要なセキュリティパッチとパフォーマンスの向上が含まれています。",
         score: 5,
-        comment: "Perfect technical translation",
+        comment: "完美的技术翻译",
       },
       {
         promptId: "2",
-        promptName: "Marketing Content Translation",
+        promptName: "营销内容翻译",
         text: "ソフトウェアの更新には、重要なセキュリティ修正と性能向上が含まれています。",
         score: 4,
-        comment: "Good but less precise terminology",
+        comment: "不错，但术语不够精确",
       },
     ],
   },
@@ -51,14 +51,14 @@ const mockResults: ResultItem[] = [
     outputs: [
       {
         promptId: "1",
-        promptName: "Technical Documentation Translation",
+        promptName: "技术文档翻译",
         text: "インストール後、すべての変更を適用するためにデバイスを再起動してください。",
         score: 5,
         comment: "",
       },
       {
         promptId: "2",
-        promptName: "Marketing Content Translation",
+        promptName: "营销内容翻译",
         text: "インストール後は、すべての変更を適用するために、お使いのデバイスを再起動してください。",
         score: 4,
         comment: "",
@@ -72,17 +72,17 @@ const mockResults: ResultItem[] = [
     outputs: [
       {
         promptId: "1",
-        promptName: "Technical Documentation Translation",
+        promptName: "技术文档翻译",
         text: "この機能は、古いバージョンのオペレーティングシステムとは互換性がありません。",
         score: 5,
         comment: "",
       },
       {
         promptId: "2",
-        promptName: "Marketing Content Translation",
+        promptName: "营销内容翻译",
         text: "この機能は、オペレーティングシステムの古いバージョンでは使用できません。",
         score: 3,
-        comment: "Missing technical precision",
+        comment: "缺乏技术精确性",
       },
     ],
   },
@@ -132,45 +132,43 @@ export function EvaluationResults() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h2 className="text-2xl font-bold tracking-tight">Evaluation Results</h2>
+        <h2 className="text-2xl font-bold tracking-tight">评估结果</h2>
         <div className="flex items-center gap-2">
           <Button variant="outline">
             <Download className="mr-2 h-4 w-4" />
-            Export Results
+            导出结果
           </Button>
-          <Button>Save Evaluation</Button>
+          <Button>保存评估</Button>
         </div>
       </div>
 
       <Card>
         <CardHeader>
-          <CardTitle>Prompt Comparison</CardTitle>
-          <CardDescription>Comparing the differences between the evaluated prompts</CardDescription>
+          <CardTitle>提示比较</CardTitle>
+          <CardDescription>比较已评估提示之间的差异</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="grid gap-4 md:grid-cols-2">
             <div className="rounded-lg border p-4">
-              <h3 className="font-medium mb-2">Technical Documentation Translation (v1.2)</h3>
+              <h3 className="font-medium mb-2">技术文档翻译 (v1.2)</h3>
               <p className="text-sm font-mono whitespace-pre-wrap">
-                You are a technical translator specializing in [SOURCE_LANGUAGE] to [TARGET_LANGUAGE] translations.
-                Translate the following technical documentation, maintaining all technical terminology accurately.
-                Preserve formatting such as bullet points and numbered lists.
+                您是一位专门从事 [源语言] 到 [目标语言] 翻译的技术译员。
+                请翻译以下技术文档，并准确保留所有技术术语。
+                请保留项目符号和编号列表等格式。
                 <span className="bg-green-100 dark:bg-green-900/30">
-                  If specific technical terms should not be translated, keep them in the original language and format
-                  them in italics.
+                  如果特定技术术语不应翻译，请保留原文并在格式上使用斜体。
                 </span>
               </p>
             </div>
             <div className="rounded-lg border p-4">
-              <h3 className="font-medium mb-2">Marketing Content Translation (v2.1)</h3>
+              <h3 className="font-medium mb-2">营销内容翻译 (v2.1)</h3>
               <p className="text-sm font-mono whitespace-pre-wrap">
-                You are a marketing translator specializing in adapting persuasive content from [SOURCE_LANGUAGE] to
-                [TARGET_LANGUAGE]. Translate the following marketing content, maintaining the emotional impact and
-                persuasive elements.
+                您是一位营销译员，专门将 [源语言] 的说服性内容改编为 [目标语言]。
+                请翻译以下营销内容，并保持其情感冲击力和说服元素。
                 <span className="bg-yellow-100 dark:bg-yellow-900/30">
-                  Adapt cultural references as needed to resonate with the target audience.
+                  请根据需要调整文化参考，以引起目标受众的共鸣。
                 </span>
-                Preserve the tone, style, and brand voice of the original content.
+                请保留原始内容的语调、风格和品牌声音。
               </p>
             </div>
           </div>
@@ -181,10 +179,10 @@ export function EvaluationResults() {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead className="w-[200px]">Source Text</TableHead>
-              <TableHead className="w-[200px]">Reference Translation</TableHead>
-              <TableHead>Technical Documentation Translation (v1.2)</TableHead>
-              <TableHead>Marketing Content Translation (v2.1)</TableHead>
+              <TableHead className="w-[200px]">源文本</TableHead>
+              <TableHead className="w-[200px]">参考译文</TableHead>
+              <TableHead>技术文档翻译 (v1.2)</TableHead>
+              <TableHead>营销内容翻译 (v2.1)</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -220,17 +218,17 @@ export function EvaluationResults() {
                           </DialogTrigger>
                           <DialogContent>
                             <DialogHeader>
-                              <DialogTitle>Add Comment</DialogTitle>
+                              <DialogTitle>添加评论</DialogTitle>
                             </DialogHeader>
                             <div className="grid gap-4 py-4">
                               <Textarea
-                                placeholder="Add your comment here..."
+                                placeholder="在此处添加您的评论..."
                                 value={output.comment || ""}
                                 onChange={(e) => handleCommentChange(result.id, output.promptId, e.target.value)}
                                 rows={5}
                               />
                             </div>
-                            <Button className="w-full">Save Comment</Button>
+                            <Button className="w-full">保存评论</Button>
                           </DialogContent>
                         </Dialog>
                       </div>

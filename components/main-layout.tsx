@@ -53,15 +53,15 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
               <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
                 <div className="flex items-center justify-between">
                   <TabsList>
-                    <TabsTrigger value="library">Prompt Library</TabsTrigger>
-                    <TabsTrigger value="editor" disabled={activeTab !== 'editor' && !selectedPrompt}>Prompt Editor</TabsTrigger>
-                    <TabsTrigger value="evaluate">Evaluate</TabsTrigger>
-                    <TabsTrigger value="saved-sessions">Saved Sessions</TabsTrigger>
+                    <TabsTrigger value="library">提示库</TabsTrigger>
+                    <TabsTrigger value="editor" disabled={activeTab !== 'editor' && !selectedPrompt}>提示编辑器</TabsTrigger>
+                    <TabsTrigger value="evaluate">评估</TabsTrigger>
+                    <TabsTrigger value="saved-sessions">已保存的会话</TabsTrigger>
                   </TabsList>
                   {(activeTab === 'library' || activeTab === 'editor') && (
                       <Button onClick={handleNewPrompt} className="ml-auto">
                         <PlusCircle className="mr-2 h-4 w-4" />
-                        New Prompt
+                        新建提示
                       </Button>
                   )}
                 </div>

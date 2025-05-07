@@ -25,7 +25,7 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
 
     // While loading auth state, show a loading indicator (or null)
     if (isLoading) {
-        return <div>Loading authentication...</div>; // Or a proper spinner component
+        return <div>正在加载认证信息...</div>; // Or a proper spinner component
     }
 
     // If loading is done and token exists, render the children

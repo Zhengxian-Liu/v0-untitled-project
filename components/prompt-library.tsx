@@ -24,17 +24,17 @@ import type { Prompt, EvaluationSessionSummary } from "@/types"
 import { apiClient } from "@/lib/apiClient"
 
 const availableLanguages = [
-  { id: "all", name: "All Languages" },
-  { id: "en", name: "English" },
-  { id: "ja", name: "Japanese" },
-  { id: "ko", name: "Korean" },
-  { id: "zh", name: "Chinese" },
-  { id: "fr", name: "French" },
-  { id: "de", name: "German" },
-  { id: "es", name: "Spanish" },
-  { id: "it", name: "Italian" },
-  { id: "ru", name: "Russian" },
-  { id: "pt", name: "Portuguese" },
+  { id: "all", name: "所有语言" },
+  { id: "en", name: "英语" },
+  { id: "ja", name: "日语" },
+  { id: "ko", name: "韩语" },
+  { id: "zh", name: "中文" },
+  { id: "fr", name: "法语" },
+  { id: "de", name: "德语" },
+  { id: "es", name: "西班牙语" },
+  { id: "it", name: "意大利语" },
+  { id: "ru", name: "俄语" },
+  { id: "pt", name: "葡萄牙语" },
 ]
 
 interface PromptLibraryProps {
@@ -60,11 +60,11 @@ export function PromptLibrary({ onPromptSelect, currentLanguage }: PromptLibrary
         if (Array.isArray(data)) {
           setPrompts(data)
         } else {
-          throw new Error("Invalid data format received from API")
+          throw new Error("从API接收到的数据格式无效")
         }
       } catch (err) {
-        console.error("Failed to fetch prompts:", err)
-        setError(err instanceof Error ? err.message : "An unknown error occurred")
+        console.error("获取提示失败:", err)
+        setError(err instanceof Error ? err.message : "发生未知错误")
       } finally {
         setIsLoading(false)
       }
@@ -75,25 +75,25 @@ export function PromptLibrary({ onPromptSelect, currentLanguage }: PromptLibrary
   }, [])
 
   const projects = [
-    { id: "all", name: "All Projects" },
-    { id: "genshin", name: "Genshin" },
-    { id: "honkai", name: "Honkai: Starrail" },
-    { id: "zenless", name: "Zenless Zone Zero" },
+    { id: "all", name: "所有项目" },
+    { id: "genshin", name: "原神" },
+    { id: "honkai", name: "崩坏：星穹铁道" },
+    { id: "zenless", name: "绝区零" },
   ]
 
   const handleDeletePrompt = async (promptId: string) => {
     try {
       await apiClient(`/prompts/${promptId}`, { method: 'DELETE' })
       toast({
-        title: "Prompt Deleted",
-        description: `Prompt version ${promptId} marked as deleted.`,
+        title: "提示已删除",
+        description: `提示版本 ${promptId} 已标记为删除。`,
       })
       fetchPrompts()
     } catch (err) {
-      console.error("Failed to delete prompt:", err)
+      console.error("删除提示失败:", err)
       toast({
-        title: "Error Deleting Prompt",
-        description: err instanceof Error ? err.message : "An unknown error occurred",
+        title: "删除提示时出错",
+        description: err instanceof Error ? err.message : "发生未知错误",
         variant: "destructive",
       })
     }
@@ -113,7 +113,7 @@ export function PromptLibrary({ onPromptSelect, currentLanguage }: PromptLibrary
       <div className="flex flex-wrap items-center gap-4 mb-4">
         <Select value={selectedProject} onValueChange={setSelectedProject}>
           <SelectTrigger className="w-[200px]">
-            <SelectValue placeholder="Select project" />
+            <SelectValue placeholder="选择项目" />
           </SelectTrigger>
           <SelectContent>
             {projects.map((project) => (
@@ -133,34 +133,34 @@ export function PromptLibrary({ onPromptSelect, currentLanguage }: PromptLibrary
             className="rounded border-gray-300 text-primary focus:ring-primary"
           />
           <label htmlFor="show-production" className="text-sm font-medium">
-            Show Production Only
+            仅显示生产版本
           </label>
         </div>
 
         <Input
-          placeholder="Search prompts..."
+          placeholder="搜索提示..."
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
           className="max-w-sm"
         />
       </div>
 
-      {isLoading && <p>Loading prompts...</p>}
-      {error && <p className="text-red-500">Error loading prompts: {error}</p>}
+      {isLoading && <p>正在加载提示...</p>}
+      {error && <p className="text-red-500">加载提示时出错: {error}</p>}
 
       {!isLoading && !error && (
         <div className="rounded-md border">
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Name</TableHead>
-                <TableHead>Description</TableHead>
-                <TableHead>Tags</TableHead>
-                <TableHead>Project</TableHead>
-                <TableHead>Version</TableHead>
-                <TableHead>Production</TableHead>
-                <TableHead>Last Modified</TableHead>
-                <TableHead>Actions</TableHead>
+                <TableHead>名称</TableHead>
+                <TableHead>描述</TableHead>
+                <TableHead>标签</TableHead>
+                <TableHead>项目</TableHead>
+                <TableHead>版本</TableHead>
+                <TableHead>生产</TableHead>
+                <TableHead>最后修改时间</TableHead>
+                <TableHead>操作</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -191,9 +191,9 @@ export function PromptLibrary({ onPromptSelect, currentLanguage }: PromptLibrary
                           </Badge>
                         )}
                       </TableCell>
-                      <TableCell>{prompt.version ? `v${prompt.version}` : "N/A"}</TableCell>
+                      <TableCell>{prompt.version ? `v${prompt.version}` : "不适用"}</TableCell>
                       <TableCell>{prompt.isProduction && <CheckCircle2 className="h-5 w-5 text-green-500" />}</TableCell>
-                      <TableCell>{prompt.updated_at ? new Date(prompt.updated_at).toLocaleString() : "N/A"}</TableCell>
+                      <TableCell>{prompt.updated_at ? new Date(prompt.updated_at).toLocaleString() : "不适用"}</TableCell>
                       <TableCell>
                         <AlertDialog>
                           <AlertDialogTrigger asChild>
@@ -201,28 +201,28 @@ export function PromptLibrary({ onPromptSelect, currentLanguage }: PromptLibrary
                               variant="ghost"
                               size="icon"
                               onClick={(e) => e.stopPropagation()}
-                              aria-label="Delete prompt version"
+                              aria-label="删除提示版本"
                             >
                               <Trash2 className="h-4 w-4 text-destructive" />
                             </Button>
                           </AlertDialogTrigger>
                           <AlertDialogContent onClick={(e) => e.stopPropagation()}>
                             <AlertDialogHeader>
-                              <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+                              <AlertDialogTitle>您确定吗？</AlertDialogTitle>
                               <AlertDialogDescription>
-                                This action will mark prompt version 
-                                <code className="mx-1 font-mono bg-muted px-1 rounded">{prompt.version}</code> of 
-                                <code className="mx-1 font-mono bg-muted px-1 rounded">{prompt.name}</code> as deleted. 
-                                It will be hidden but not permanently removed (soft delete).
+                                此操作会将提示 
+                                <code className="mx-1 font-mono bg-muted px-1 rounded">{prompt.name}</code> 的版本 
+                                <code className="mx-1 font-mono bg-muted px-1 rounded">{prompt.version}</code> 标记为已删除。 
+                                它将被隐藏但不会被永久移除（软删除）。
                               </AlertDialogDescription>
                             </AlertDialogHeader>
                             <AlertDialogFooter>
-                              <AlertDialogCancel>Cancel</AlertDialogCancel>
+                              <AlertDialogCancel>取消</AlertDialogCancel>
                               <AlertDialogAction
                                 onClick={() => handleDeletePrompt(prompt.id)}
                                 className="bg-destructive hover:bg-destructive/90 text-destructive-foreground"
                               >
-                                Delete
+                                删除
                               </AlertDialogAction>
                             </AlertDialogFooter>
                           </AlertDialogContent>
@@ -234,7 +234,7 @@ export function PromptLibrary({ onPromptSelect, currentLanguage }: PromptLibrary
               ) : (
                 <TableRow>
                     <TableCell colSpan={8} className="text-center">
-                        No prompts found.
+                        未找到提示。
                     </TableCell>
                 </TableRow>
               )}

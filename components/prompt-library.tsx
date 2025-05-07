@@ -5,8 +5,23 @@ import { Input } from "@/components/ui/input"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
 import { CheckCircle2 } from "lucide-react"
+import { Trash2 } from "lucide-react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import type { Prompt } from "@/types"
+import { Button } from "@/components/ui/button"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog"
+import { useToast } from "@/components/ui/use-toast"
+import type { Prompt, EvaluationSessionSummary } from "@/types"
+import { apiClient } from "@/lib/apiClient"
 
 const availableLanguages = [
   { id: "all", name: "All Languages" },
@@ -34,33 +49,30 @@ export function PromptLibrary({ onPromptSelect, currentLanguage }: PromptLibrary
   const [showProductionOnly, setShowProductionOnly] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const { toast } = useToast()
 
-  useEffect(() => {
     const fetchPrompts = async () => {
       setIsLoading(true)
       setError(null)
       try {
-        const response = await fetch("http://localhost:8000/api/v1/prompts/");
-        if (!response.ok) {
-          let errorDetail = `HTTP error! status: ${response.status}`;
-          try {
-            const errorData = await response.json();
-            errorDetail = errorData.detail || errorDetail;
-          } catch (e) { /* Ignore JSON parsing error */ }
-          throw new Error(errorDetail);
+        const data = await apiClient<Prompt[]>('/prompts/')
+        console.log("PromptLibrary: Fetched data:", data)
+        if (Array.isArray(data)) {
+          setPrompts(data)
+        } else {
+          throw new Error("Invalid data format received from API")
         }
-        const data = await response.json();
-        setPrompts(data as Prompt[]);
       } catch (err) {
-        console.error("Failed to fetch prompts:", err);
-        setError(err instanceof Error ? err.message : "An unknown error occurred");
+        console.error("Failed to fetch prompts:", err)
+        setError(err instanceof Error ? err.message : "An unknown error occurred")
       } finally {
-        setIsLoading(false);
+        setIsLoading(false)
       }
-    };
+    }
 
-    fetchPrompts();
-  }, []);
+  useEffect(() => {
+    fetchPrompts()
+  }, [])
 
   const projects = [
     { id: "all", name: "All Projects" },
@@ -69,6 +81,24 @@ export function PromptLibrary({ onPromptSelect, currentLanguage }: PromptLibrary
     { id: "zenless", name: "Zenless Zone Zero" },
   ]
 
+  const handleDeletePrompt = async (promptId: string) => {
+    try {
+      await apiClient(`/prompts/${promptId}`, { method: 'DELETE' })
+      toast({
+        title: "Prompt Deleted",
+        description: `Prompt version ${promptId} marked as deleted.`,
+      })
+      fetchPrompts()
+    } catch (err) {
+      console.error("Failed to delete prompt:", err)
+      toast({
+        title: "Error Deleting Prompt",
+        description: err instanceof Error ? err.message : "An unknown error occurred",
+        variant: "destructive",
+      })
+    }
+  }
+
   const filteredPrompts = prompts.filter(
     (prompt) =>
       prompt.language === currentLanguage &&
@@ -76,7 +106,7 @@ export function PromptLibrary({ onPromptSelect, currentLanguage }: PromptLibrary
         (prompt.description && prompt.description.toLowerCase().includes(searchQuery.toLowerCase()))) &&
       (selectedProject === "all" || prompt.project === selectedProject) &&
       (!showProductionOnly || prompt.isProduction === true)
-  );
+  )
 
   return (
     <div className="space-y-4">
@@ -130,6 +160,7 @@ export function PromptLibrary({ onPromptSelect, currentLanguage }: PromptLibrary
                 <TableHead>Version</TableHead>
                 <TableHead>Production</TableHead>
                 <TableHead>Last Modified</TableHead>
+                <TableHead>Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -163,6 +194,40 @@ export function PromptLibrary({ onPromptSelect, currentLanguage }: PromptLibrary
                       <TableCell>{prompt.version ? `v${prompt.version}` : "N/A"}</TableCell>
                       <TableCell>{prompt.isProduction && <CheckCircle2 className="h-5 w-5 text-green-500" />}</TableCell>
                       <TableCell>{prompt.updated_at ? new Date(prompt.updated_at).toLocaleString() : "N/A"}</TableCell>
+                      <TableCell>
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={(e) => e.stopPropagation()}
+                              aria-label="Delete prompt version"
+                            >
+                              <Trash2 className="h-4 w-4 text-destructive" />
+                            </Button>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent onClick={(e) => e.stopPropagation()}>
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+                              <AlertDialogDescription>
+                                This action will mark prompt version 
+                                <code className="mx-1 font-mono bg-muted px-1 rounded">{prompt.version}</code> of 
+                                <code className="mx-1 font-mono bg-muted px-1 rounded">{prompt.name}</code> as deleted. 
+                                It will be hidden but not permanently removed (soft delete).
+                              </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel>Cancel</AlertDialogCancel>
+                              <AlertDialogAction
+                                onClick={() => handleDeletePrompt(prompt.id)}
+                                className="bg-destructive hover:bg-destructive/90 text-destructive-foreground"
+                              >
+                                Delete
+                              </AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
+                      </TableCell>
                     </TableRow>
                   );
                 })

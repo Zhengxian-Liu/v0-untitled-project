@@ -31,11 +31,24 @@ import {
   BookmarkPlus,
   Bookmark,
   AlertTriangle,
+  Loader2,
+  Check,
+  Library,
 } from "lucide-react"
 import type { Prompt, PromptSection, SavedSection, ProductionPrompt } from "@/types"
 import { toast } from "sonner"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { apiClient } from "@/lib/apiClient"
+import { PredefinedTemplate, predefinedSectionTemplates } from "@/lib/prompt-templates"
+
+// +++ ADD: Type for fetched prompt structure M +++
+type PromptStructure = {
+  output_requirement: string;
+  task_info: string;
+  // character_info?: string; // Add later if needed
+}
+// +++ END ADD +++
 
 type Template = {
   id: string
@@ -207,7 +220,48 @@ export function PromptEditor({ prompt, onSaveSuccess, currentLanguage }: PromptE
   const [showProductionConfirmDialog, setShowProductionConfirmDialog] = useState(false)
   // --- End Restore ---
 
+  // +++ ADD: State for fetched backend templates M +++
+  const [promptStructure, setPromptStructure] = useState<PromptStructure | null>(null);
+  const [isLoadingStructure, setIsLoadingStructure] = useState(true);
+  const [structureError, setStructureError] = useState<string | null>(null);
+  // +++ END ADD +++
+
+  // --- Versioning State --- M
+  const [versionHistory, setVersionHistory] = useState<Prompt[]>([])
+  const [isLoadingHistory, setIsLoadingHistory] = useState(false)
+  const [historyError, setHistoryError] = useState<string | null>(null)
+  const [currentlyLoadedVersionId, setCurrentlyLoadedVersionId] = useState<string | null>(null)
+  // --- End Versioning State ---
+
+  // --- Function to fetch version history --- M
+  const fetchVersionHistory = async (basePromptId: string) => {
+    setIsLoadingHistory(true);
+    setHistoryError(null);
+    try {
+      const url = `/prompts/base/${basePromptId}/versions`;
+      const historyData = await apiClient<Prompt[]>(url);
+      // Sort history newest first (optional, backend might already do this)
+      historyData.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+      setVersionHistory(historyData);
+      console.log("Fetched version history: ", historyData);
+    } catch (err) {
+      console.error("Error fetching version history:", err);
+      const errorMsg = err instanceof Error ? err.message : "Unknown error";
+      setHistoryError(errorMsg);
+      toast.error(`Failed to load version history: ${errorMsg}`);
+      setVersionHistory([]); // Clear history on error
+    } finally {
+      setIsLoadingHistory(false);
+    }
+  };
+  // --- End fetch function ---
+
   useEffect(() => {
+    // Reset version history when prompt changes
+    setVersionHistory([]);
+    setIsLoadingHistory(false);
+    setHistoryError(null);
+
     if (prompt) {
       // Load state from the passed prompt object
       setName(prompt.name || "")
@@ -217,6 +271,16 @@ export function PromptEditor({ prompt, onSaveSuccess, currentLanguage }: PromptE
       setSelectedProject(prompt.project)
       setIsProduction(prompt.isProduction || false)
       setVersion(prompt.version || "1.0")
+      // --- Set currently loaded ID and fetch history --- M
+      setCurrentlyLoadedVersionId(prompt.id);
+      if (prompt.base_prompt_id) {
+         fetchVersionHistory(prompt.base_prompt_id);
+      } else {
+         // This case shouldn't happen if prompts are created correctly
+         console.warn("Prompt loaded in editor is missing base_prompt_id! Cannot fetch history.");
+         setHistoryError("Cannot fetch history: Prompt base ID missing.");
+      }
+      // --- End fetch --- M
     } else {
       // Reset form for new prompt (set default sections)
       setName("")
@@ -230,41 +294,77 @@ export function PromptEditor({ prompt, onSaveSuccess, currentLanguage }: PromptE
         { id: "2", type: "context", name: "Context", content: "" },
         { id: "3", type: "instructions", name: "Instructions", content: "" },
       ])
+      // --- Clear loaded ID for new prompt --- M
+      setCurrentlyLoadedVersionId(null);
+      // --- End Clear ---
     }
   }, [prompt])
 
-  // --- Restore Effect to check for existing production prompt (using fixed language 'en') --- M
+  // +++ ADD: Effect to fetch backend prompt structure M +++
+  useEffect(() => {
+    const fetchPromptStructure = async () => {
+      setIsLoadingStructure(true);
+      setStructureError(null);
+      try {
+        const data = await apiClient<PromptStructure>("/prompt-structure"); // Assumes API endpoint is /api/v1/prompt-structure
+        setPromptStructure(data);
+      } catch (err) {
+        console.error("Error fetching prompt structure:", err);
+        const errorMsg = err instanceof Error ? err.message : "Unknown error fetching prompt structure";
+        setStructureError(errorMsg);
+        toast.error(`Failed to load prompt structure: ${errorMsg}`);
+        setPromptStructure(null); // Clear structure on error
+      } finally {
+        setIsLoadingStructure(false);
+      }
+    };
+
+    fetchPromptStructure();
+  }, []); // Empty dependency array means run once on mount
+  // +++ END ADD +++
+
+  // Effect to check production status
   useEffect(() => {
     const fetchCurrentProductionPrompt = async () => {
       if (selectedProject && currentLanguage) {
-        setIsLoadingProductionCheck(true);
-        setCurrentProductionPrompt(null); // Reset before fetching
         try {
-          const url = `http://localhost:8000/api/v1/prompts/production/?project=${encodeURIComponent(selectedProject)}&language=${encodeURIComponent(currentLanguage)}`;
-          const response = await fetch(url);
-
-          if (response.ok) {
-            const data: Prompt = await response.json();
-            setCurrentProductionPrompt(data);
-          } else if (response.status === 404) {
+          // --- Use apiClient --- M
+          const url = `/prompts/production/?project=${encodeURIComponent(selectedProject)}&language=${encodeURIComponent(currentLanguage)}`;
+          const data = await apiClient<Prompt>(url);
+          // --- End Use --- M
+          setCurrentProductionPrompt(data);
+        } catch (error: any) {
+          if (error.message.includes("404")) { // Check error message for 404
             setCurrentProductionPrompt(null);
           } else {
-            console.error("Error fetching production prompt status:", response.statusText);
+            console.error("Error fetching production prompt status:", error);
             setCurrentProductionPrompt(null);
           }
-        } catch (error) {
-          console.error("Failed to fetch production prompt status:", error);
-          setCurrentProductionPrompt(null);
-        } finally {
-          setIsLoadingProductionCheck(false);
-        }
-      } else {
-        setCurrentProductionPrompt(null);
-      }
+        } finally { setIsLoadingProductionCheck(false); }
+      } else { setCurrentProductionPrompt(null); }
     };
     fetchCurrentProductionPrompt();
   }, [selectedProject, currentLanguage]);
-  // --- End Restore Effect ---
+
+  // --- Version Select Handler --- M
+  const handleVersionSelect = (selectedPrompt: Prompt) => {
+    console.log("Loading version:", selectedPrompt.id, selectedPrompt.version);
+
+    // Update all relevant form states with the selected version's data
+    setName(selectedPrompt.name || "");
+    setDescription(selectedPrompt.description || "");
+    setSections(selectedPrompt.sections && selectedPrompt.sections.length > 0 ? selectedPrompt.sections : []);
+    setSelectedTags(selectedPrompt.tags || []);
+    setSelectedProject(selectedPrompt.project);
+    setIsProduction(selectedPrompt.isProduction || false);
+    setVersion(selectedPrompt.version || "?.?"); // Update displayed version
+
+    // Update the tracker for which version is currently loaded
+    setCurrentlyLoadedVersionId(selectedPrompt.id);
+
+    toast.info(`Loaded version ${selectedPrompt.version}`);
+  };
+  // --- End Version Select Handler ---
 
   const handleTagToggle = (tag: string) => {
     if (selectedTags.includes(tag)) {
@@ -418,15 +518,70 @@ export function PromptEditor({ prompt, onSaveSuccess, currentLanguage }: PromptE
   };
   // --- End Restore ---
 
+  // --- Constants and Helper for Variable Highlighting --- M
+  const KNOWN_VARIABLES = [
+      "{SOURCE_TEXT}", "{TARGET_LANGUAGE}", "{PREVIOUS_CONTEXT}", "{FOLLOWING_CONTEXT}", 
+      "{TERMINOLOGY}", "{SIMILAR_TRANSLATIONS}", "{ADDITIONAL_INSTRUCTIONS}", 
+      // Future placeholders from prompt_logic.md (ensure exact match)
+      "{nameChs}", "{name}", "{gender}", "{age}", "{occupation}", 
+      "{faction}", "{personality}", "{speakingStyle}", "{sampleDialogue}", "{writingStyle}" 
+      // Add any other placeholders used in templates
+  ];
+  const variableRegex = new RegExp(`(${KNOWN_VARIABLES.map(v => v.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')).join('|')})`, 'g');
+
+  // --- Preview Logic --- M
+  // Helper function to highlight variables in text
+  const highlightVariables = (text: string): React.ReactNode => {
+    if (!text) return null;
+    const parts = text.split(variableRegex);
+    return parts.map((part, index) => {
+      if (KNOWN_VARIABLES.includes(part)) {
+        return (
+          <code key={index} className="bg-primary/10 text-primary font-semibold rounded px-1 py-0.5">{part}</code>
+        );
+      }
+      return part;
+    });
+  };
+
+  const assembleSystemPromptPreview = () => {
+    const rules = sections
+      .map((section) => `### ${section.name}\n${section.content}`)
+      .join("\n\n");
+    // Combine and highlight
+    // +++ UPDATE: Use fetched template M +++
+    const fullSystemPrompt = `${rules}\n\n${promptStructure?.output_requirement || "Error loading output requirement..."}`;
+    // +++ END UPDATE +++
+    console.log("Assembled System Prompt Preview:", fullSystemPrompt);
+    return highlightVariables(fullSystemPrompt);
+  };
+
+  const assembleUserPromptPreview = () => {
+    // +++ UPDATE: Use fetched template M +++
+    let userPrompt = promptStructure?.task_info || "Error loading task info...";
+    // +++ END UPDATE +++
+    userPrompt = userPrompt.replace("{TARGET_LANGUAGE}", currentLanguage || "{TARGET_LANGUAGE}");
+    // Highlight after substitution
+    return highlightVariables(userPrompt);
+  };
+  // --- End Preview Logic ---
+
   const handleSave = async () => {
     console.log("Save button clicked!");
 
     // --- MODIFIED: Handle both Create (POST) and Save New Version (PUT) --- M
     const isCreatingNew = !prompt; // True if prompt prop is null
     const method = isCreatingNew ? "POST" : "PUT";
-    const url = isCreatingNew
-      ? "http://localhost:8000/api/v1/prompts/"
-      : `http://localhost:8000/api/v1/prompts/${prompt.id}`; // Use prompt.id for PUT base
+    const endpoint = isCreatingNew
+      ? `/prompts/`
+      : `/prompts/${currentlyLoadedVersionId}`;
+
+    // Add a check for PUT if the loaded ID is missing (shouldn't happen)
+    if (method === "PUT" && !currentlyLoadedVersionId) {
+        toast.error("Cannot save: No base version loaded in the editor.");
+        console.error("Save aborted: currentlyLoadedVersionId is null for PUT request.");
+        return;
+    }
 
     // Payload preparation - needs slight adjustment based on method
     const basePayload = {
@@ -447,29 +602,16 @@ export function PromptEditor({ prompt, onSaveSuccess, currentLanguage }: PromptE
 
     // --- End MODIFICATION ---
 
-    console.log(`Attempting to ${method} prompt data to ${url}:`, promptData);
+    console.log(`Attempting to ${method} prompt data to ${endpoint}:`, promptData);
 
     try {
-      const response = await fetch(url, {
+      // --- Use apiClient --- M
+      const savedPromptVersion = await apiClient<Prompt>(endpoint, {
         method: method,
-        headers: {
-          "Content-Type": "application/json",
-        },
         body: JSON.stringify(promptData),
+        // apiClient sets Content-Type header automatically for JSON body
       });
-
-      if (!response.ok) {
-        let errorDetail = `HTTP error! status: ${response.status}`;
-        try {
-            const errorData = await response.json();
-            errorDetail = errorData.detail || errorDetail;
-        } catch (e) { /* Ignore JSON parsing error */ }
-        console.error("Failed to save prompt:", errorDetail);
-        toast.error(`Error saving prompt: ${errorDetail}`);
-        throw new Error(errorDetail);
-      }
-
-      const savedPromptVersion: Prompt = await response.json();
+      // --- End Use --- M
       const successMessage = isCreatingNew
         ? `Prompt created successfully as version ${savedPromptVersion.version}!`
         : `Prompt saved successfully as new version ${savedPromptVersion.version}!`;
@@ -477,8 +619,13 @@ export function PromptEditor({ prompt, onSaveSuccess, currentLanguage }: PromptE
 
       // Update local state
       setVersion(savedPromptVersion.version || "?.?");
-      // If creating, maybe update the 'prompt' prop reference somehow?
-      // For now, rely on library refresh via onSaveSuccess
+      // Update the currently loaded ID to the newly saved version's ID
+      setCurrentlyLoadedVersionId(savedPromptVersion.id);
+
+      // Refetch history to include the new version
+      if (savedPromptVersion.base_prompt_id) {
+          fetchVersionHistory(savedPromptVersion.base_prompt_id);
+      }
 
       if (onSaveSuccess) {
         onSaveSuccess();
@@ -490,6 +637,30 @@ export function PromptEditor({ prompt, onSaveSuccess, currentLanguage }: PromptE
     }
   };
 
+  // >>> ADD LOG <<<
+  console.log("[PromptEditor Render] showPreview state:", showPreview);
+
+  // +++ ADD: Handler for inserting predefined template M +++
+  const handlePredefinedTemplateInsert = (template: PredefinedTemplate, sectionId: string) => {
+    setSections(
+      sections.map((section) => {
+        if (section.id === sectionId) {
+          // Append the template content to the existing content
+          const newContent = section.content
+            ? `${section.content}\n\n${template.content}`
+            : template.content;
+          return {
+            ...section,
+            content: newContent,
+          };
+        }
+        return section;
+      }),
+    );
+    toast.info(`Template "${template.name}" inserted.`);
+  };
+  // +++ END ADD +++
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -497,13 +668,51 @@ export function PromptEditor({ prompt, onSaveSuccess, currentLanguage }: PromptE
           {prompt ? `Editing: ${prompt.name}` : "Create New Prompt"}
         </h2>
         <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" onClick={() => setShowPreview(!showPreview)}>
+          <Button variant="outline" size="sm" onClick={() => {
+              console.log("[PromptEditor] Toggle Preview Button Clicked. Current showPreview:", showPreview);
+              setShowPreview(!showPreview);
+          }}>
             {showPreview ? "Hide Preview" : "Show Preview"}
           </Button>
-          <div className="flex items-center border rounded-md px-2 py-1 h-9">
-            <span className="text-sm text-muted-foreground mr-1">Version:</span>
-            <span className="text-sm font-medium">{version}</span>
-          </div>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="sm" className="h-9">
+                Version: {version}
+                {isLoadingHistory ? (
+                  <Loader2 className="ml-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <ChevronDown className="ml-2 h-4 w-4" />
+                )}
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-64">
+              <div className="px-2 py-1.5 text-sm font-semibold">Version History</div>
+              {historyError && (
+                 <div className="px-2 py-1.5 text-sm text-destructive">{historyError}</div>
+              )}
+              {!isLoadingHistory && !historyError && versionHistory.length === 0 && (
+                <div className="px-2 py-1.5 text-sm text-muted-foreground">(No history found)</div>
+              )}
+              {!isLoadingHistory && !historyError && versionHistory.map((histPrompt) => (
+                <DropdownMenuItem
+                  key={histPrompt.id}
+                  onSelect={() => handleVersionSelect(histPrompt)}
+                  className="cursor-pointer"
+                  disabled={histPrompt.id === currentlyLoadedVersionId}
+                >
+                  <span className="mr-auto">
+                    Version {histPrompt.version}
+                    {histPrompt.is_latest && <Badge variant="secondary" className="ml-2">Latest</Badge>}
+                    {histPrompt.isProduction && <Badge variant="destructive" className="ml-2">Prod</Badge>}
+                  </span>
+                  <span className="text-xs text-muted-foreground">
+                    {new Date(histPrompt.created_at).toLocaleDateString()}
+                  </span>
+                  {histPrompt.id === currentlyLoadedVersionId && <Check className="ml-2 h-4 w-4"/>}
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
 
@@ -550,13 +759,24 @@ export function PromptEditor({ prompt, onSaveSuccess, currentLanguage }: PromptE
           <Card className="mb-4">
             <CardHeader>
               <CardTitle>Complete Prompt Preview</CardTitle>
-              <CardDescription>This is how your assembled prompt will look</CardDescription>
+              <CardDescription>Shows how the prompt components are assembled for the LLM.</CardDescription>
             </CardHeader>
-            <CardContent>
-              <div className="bg-muted p-4 rounded-md">
-                <pre className="whitespace-pre-wrap font-mono text-sm overflow-auto max-h-[400px]">
-                  {assembleCompletePrompt()}
-                </pre>
+            <CardContent className="space-y-4">
+              <div>
+                <h4 className="font-semibold mb-2 text-muted-foreground">System Prompt Preview:</h4>
+                <div className="bg-muted p-4 rounded-md">
+                  <pre className="whitespace-pre-wrap font-mono text-sm overflow-auto max-h-[300px]">
+                    {assembleSystemPromptPreview()}
+                  </pre>
+                </div>
+              </div>
+              <div>
+                <h4 className="font-semibold mb-2 text-muted-foreground">User Prompt Preview (Template):</h4>
+                <div className="bg-muted p-4 rounded-md">
+                  <pre className="whitespace-pre-wrap font-mono text-sm overflow-auto max-h-[300px]">
+                    {assembleUserPromptPreview()}
+                  </pre>
+                </div>
               </div>
             </CardContent>
           </Card>
@@ -595,7 +815,8 @@ export function PromptEditor({ prompt, onSaveSuccess, currentLanguage }: PromptE
                 </DialogContent>
               </Dialog>
 
-              <Dialog>
+              {/* --- COMMENT OUT/REMOVE CONFUSING TOP-LEVEL TEMPLATE BUTTON M --- */}
+              {/* <Dialog>
                 <DialogTrigger asChild>
                   <Button variant="outline" size="sm">
                     <Code className="mr-2 h-4 w-4" />
@@ -612,7 +833,7 @@ export function PromptEditor({ prompt, onSaveSuccess, currentLanguage }: PromptE
                         key={template.id}
                         className="cursor-pointer rounded-lg border p-4 hover:bg-muted"
                         onClick={() => {
-                          handleTemplateSelect(template)
+                          handleTemplateSelect(template) // This was the old logic
                         }}
                       >
                         <h4 className="font-medium">{template.name}</h4>
@@ -621,7 +842,8 @@ export function PromptEditor({ prompt, onSaveSuccess, currentLanguage }: PromptE
                     ))}
                   </div>
                 </DialogContent>
-              </Dialog>
+              </Dialog> */}
+              {/* --- END COMMENT OUT --- */}
 
               <Button variant="outline" size="sm" onClick={handleAddSection}>
                 <Plus className="mr-2 h-4 w-4" />
@@ -697,7 +919,33 @@ export function PromptEditor({ prompt, onSaveSuccess, currentLanguage }: PromptE
                     className="font-mono min-h-[120px]"
                   />
                 </CardContent>
-                <CardFooter className="flex justify-end pt-0">
+                <CardFooter className="flex justify-end pt-0 gap-2">
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        disabled={!predefinedSectionTemplates[section.type] || predefinedSectionTemplates[section.type].length === 0}
+                      >
+                        <Library className="mr-2 h-4 w-4" />
+                        Insert Template
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent>
+                      {(predefinedSectionTemplates[section.type] || []).map((template) => (
+                        <DropdownMenuItem
+                          key={template.id}
+                          onSelect={() => handlePredefinedTemplateInsert(template, section.id)}
+                          className="cursor-pointer"
+                        >
+                          {template.name}
+                        </DropdownMenuItem>
+                      ))}
+                      {(!predefinedSectionTemplates[section.type] || predefinedSectionTemplates[section.type].length === 0) && (
+                         <DropdownMenuItem disabled>No templates for this section type</DropdownMenuItem>
+                      )}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                   <Dialog>
                     <DialogTrigger asChild>
                       <Button variant="ghost" size="sm">
@@ -832,6 +1080,46 @@ export function PromptEditor({ prompt, onSaveSuccess, currentLanguage }: PromptE
       </Dialog>
       {/* --- End Restore --- */}
 
+      {/* --- UPDATE: Read-only display for fixed prompt parts (use state) M --- */}
+      <div className="space-y-4">
+        <Card className="bg-secondary/30">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">(System Prompt) Output Requirement (Fixed)</CardTitle>
+            <CardDescription className="text-xs">The model will be instructed to follow this output format.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {isLoadingStructure && <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />}
+            {structureError && <p className="text-sm text-destructive">Error: {structureError}</p>}
+            {promptStructure && (
+              <pre className="whitespace-pre-wrap font-mono text-sm p-4 rounded-md bg-background/50 overflow-auto max-h-[150px]">
+                {/* Display fetched content */}
+                {promptStructure.output_requirement}
+              </pre>
+            )}
+          </CardContent>
+        </Card>
+        <Card className="bg-secondary/30">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">(User Prompt) Task Info (Template)</CardTitle>
+            <CardDescription className="text-xs">This structure will be filled with runtime data (source text, TM, etc.).</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {isLoadingStructure && <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />}
+            {structureError && <p className="text-sm text-destructive">Error: {structureError}</p>}
+            {promptStructure && (
+              <pre className="whitespace-pre-wrap font-mono text-sm p-4 rounded-md bg-background/50 overflow-auto max-h-[250px]">
+                {/* Use highlighting helper here as well, substitute language */}
+                {highlightVariables(promptStructure.task_info.replace("{TARGET_LANGUAGE}", currentLanguage || "{TARGET_LANGUAGE}"))}
+              </pre>
+            )}
+          </CardContent>
+        </Card>
+        {/* Optional: Placeholder for Character Info */}
+         {/* <Card> ... Character Info Display ... </Card> */}
+      </div>
+      {/* --- END UPDATE --- */}
+
     </div>
   )
 }
+

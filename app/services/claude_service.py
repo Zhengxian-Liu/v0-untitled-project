@@ -1,6 +1,7 @@
 import anthropic
 import logging
 from app.core.config import settings
+from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -18,7 +19,7 @@ except Exception as e:
 async def generate_text_with_claude(
     prompt_text: str,
     source_text: str,
-    model_name: str = "claude-3-opus-20240229", # Or other suitable model
+    model_id: Optional[str] = None,
     max_tokens: int = 1024,
 ) -> str:
     """
@@ -27,7 +28,7 @@ async def generate_text_with_claude(
     Args:
         prompt_text: The system prompt or instructions.
         source_text: The user input text to be processed.
-        model_name: The name of the Claude model to use.
+        model_id: Optional ID of the Claude model to use (e.g., "claude-3-5-sonnet-20240620"). If None, uses default.
         max_tokens: The maximum number of tokens to generate.
 
     Returns:
@@ -42,13 +43,20 @@ async def generate_text_with_claude(
         # Depending on policy, could raise specific internal error
         raise ValueError("Anthropic client failed to initialize.")
 
-    logger.debug(f"Calling Claude model '{model_name}' with source text: '{source_text[:50]}...'")
+    logger.debug(f"Calling Claude model '{model_id}' with source text: '{source_text[:50]}...'")
     try:
+        # --- Determine model to use ---
+        # Use provided model_id if available, otherwise fall back to a default (e.g., from settings or hardcoded)
+        # For now, let's assume a hardcoded default if model_id is None
+        target_model = model_id if model_id else "claude-3-haiku-20240307" # Example default
+        logger.info(f"Using Claude model: {target_model}") # Log the actual model being used
+        # --- End Determine model ---
+
         # Note: Anthropic SDK is synchronous by default.
         # For high throughput, consider httpx for async calls or running sync calls in a thread pool.
         # For this MVP, a direct synchronous call might be acceptable.
         message = client.messages.create(
-            model=model_name,
+            model=target_model, # Use the determined model
             max_tokens=max_tokens,
             system=prompt_text, # System prompt sets the context/instructions
             messages=[

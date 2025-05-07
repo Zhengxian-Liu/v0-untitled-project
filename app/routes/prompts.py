@@ -11,6 +11,8 @@ from datetime import datetime
 from app.models.common import PyObjectId
 from app.models.prompt import Prompt, PromptCreate, PromptUpdate, PromptSection
 from app.db.client import get_database
+from app.routes.auth import get_current_active_user
+from app.models.user import User as UserModel
 
 router = APIRouter()
 PROMPT_COLLECTION = "prompts"
@@ -30,6 +32,7 @@ async def _ensure_unique_production_prompt(
             "project": project,
             "language": language,
             "isProduction": True,
+            "is_deleted": False
         }
         if exclude_prompt_id:
             find_filter["_id"] = {"$ne": exclude_prompt_id}
@@ -56,10 +59,11 @@ async def _ensure_unique_production_prompt(
     description="Creates the initial version (v1.0) of a prompt.",
 )
 async def create_prompt(
-    prompt_in: PromptCreate, # Uses PromptCreate model
+    prompt_in: PromptCreate,
     db: AsyncIOMotorDatabase = Depends(get_database),
+    current_user: UserModel = Depends(get_current_active_user)
 ):
-    """Create the first version (1.0) of a new prompt."""
+    """Create the first version (1.0) of a new prompt for the current user's language."""
     prompt_dict = prompt_in.model_dump(exclude_unset=True)
     now = datetime.utcnow()
 
@@ -73,18 +77,21 @@ async def create_prompt(
     prompt_dict["updated_at"] = now
     # --- End versioning fields --- M
 
+    # --- Set Language from User Context --- M
+    prompt_dict["language"] = current_user.language
+    # --- End Set Language ---
+
     # Ensure sections are present
     if "sections" not in prompt_dict:
         prompt_dict["sections"] = []
     # Text is optional and not explicitly set here
 
-    # Check production uniqueness (if applicable on first creation)
+    # Check production uniqueness
     if prompt_dict.get("isProduction") is True:
         await _ensure_unique_production_prompt(
             db,
             prompt_dict.get("project"),
-            prompt_dict.get("language"),
-            # No need to exclude ID on create
+            prompt_dict.get("language"), # Use language set from user
         )
 
     # Insert the new version document
@@ -114,18 +121,28 @@ async def read_prompts(
     db: AsyncIOMotorDatabase = Depends(get_database),
     skip: int = 0,
     limit: int = 100,
+    current_user: UserModel = Depends(get_current_active_user)
 ):
     """Retrieve the latest version of all prompts with pagination."""
-    # --- Add is_latest filter --- M
-    prompts_cursor = db[PROMPT_COLLECTION].find({"is_latest": True}).skip(skip).limit(limit)
+    # --- Filter by user language --- M
+    find_filter = {
+        "is_latest": True,
+        "language": current_user.language,
+        "is_deleted": {"$ne": True} # Include if False or field doesn't exist
+    }
+    logger.info(f"---> read_prompts: Using filter: {find_filter}")
+    prompts_cursor = db[PROMPT_COLLECTION].find(find_filter).skip(skip).limit(limit)
     # --- End filter ---
     prompts_raw = await prompts_cursor.to_list(length=limit)
+    logger.info(f"---> read_prompts: Found {len(prompts_raw)} raw prompt documents.")
+
     validated_prompts = []
     for raw_prompt in prompts_raw:
         try:
             validated_prompts.append(Prompt.model_validate(raw_prompt))
         except Exception as e:
             logger.error(f"Failed to validate prompt document with _id {raw_prompt.get('_id')}: {e}")
+    logger.info(f"---> read_prompts: Returning {len(validated_prompts)} validated prompts.")
     return validated_prompts
 
 
@@ -138,10 +155,16 @@ async def read_prompts(
 async def read_prompt(
     version_id: PyObjectId,
     db: AsyncIOMotorDatabase = Depends(get_database),
+    current_user: UserModel = Depends(get_current_active_user)
 ):
     """Retrieve a single prompt version by its ID."""
-    prompt_doc = await db[PROMPT_COLLECTION].find_one({"_id": version_id})
+    prompt_doc = await db[PROMPT_COLLECTION].find_one({"_id": version_id, "is_deleted": False})
     if prompt_doc:
+        if prompt_doc.get("language") != current_user.language:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="User is not authorized to query this prompt version",
+            )
         return Prompt.model_validate(prompt_doc)
     else:
         raise HTTPException(
@@ -161,10 +184,17 @@ async def get_production_prompt(
     project: str,
     language: str,
     db: AsyncIOMotorDatabase = Depends(get_database),
+    current_user: UserModel = Depends(get_current_active_user)
 ):
     """Retrieve the production prompt for a given project and language."""
+    if language != current_user.language:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="User is not authorized to query production prompts for this language",
+        )
+
     production_prompt_doc = await db[PROMPT_COLLECTION].find_one(
-        {"project": project, "language": language, "isProduction": True}
+        {"project": project, "language": language, "isProduction": True, "is_deleted": False}
     )
     if production_prompt_doc:
         # --- FIX: Use model_validate --- M
@@ -187,24 +217,48 @@ async def save_new_version_from_existing(
     version_id: PyObjectId, # ID of the prompt version being edited/saved from
     prompt_update: PromptUpdate, # Contains the *new* desired state
     db: AsyncIOMotorDatabase = Depends(get_database),
+    current_user: UserModel = Depends(get_current_active_user)
 ):
     """Creates a new prompt version, marking previous latest as not latest."""
-    # 1. Fetch the document being edited to get base_prompt_id
-    base_version_doc = await db[PROMPT_COLLECTION].find_one({"_id": version_id})
+    logger.info(f"---> save_new_version: Received version_id: {version_id} (Type: {type(version_id)}) update: {prompt_update.model_dump(exclude_unset=True)}")
+    # 1. Fetch the document being edited to get base_prompt_id and language
+    find_filter = {"_id": version_id, "is_deleted": {"$ne": True}}
+    logger.info(f"---> save_new_version: Attempting find_one with filter: {find_filter}")
+    base_version_doc = await db[PROMPT_COLLECTION].find_one(
+        find_filter # Use the logged filter
+    )
+    logger.info(f"---> save_new_version: find_one result: {base_version_doc}")
+
     if not base_version_doc:
-        raise HTTPException(status_code=404, detail=f"Base prompt version {version_id} not found.")
+        logger.error(f"---> save_new_version: Base version doc {version_id} evaluated as NOT FOUND.")
+        raise HTTPException(status_code=404, detail=f"Base prompt version {version_id} not found or has been deleted.")
+
+    # --- ADDED Language Check ---
+    base_language = base_version_doc.get("language")
+    logger.info(f"---> save_new_version: Language Check. Base Lang: {base_language}, User Lang: {current_user.language} (User: {current_user.username})")
+    if base_language != current_user.language:
+         raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="User cannot edit a prompt from a different language",
+        )
+    # --- End Language Check ---
 
     base_prompt_id = base_version_doc.get("base_prompt_id")
     if not base_prompt_id:
-         # Should not happen if created correctly
-         raise HTTPException(status_code=500, detail=f"Cannot determine base prompt ID for version {version_id}.")
+        logger.info(f"---> save_new_version: Found base_prompt_id: {base_prompt_id} (Type: {type(base_prompt_id)})")
+        raise HTTPException(status_code=500, detail=f"Cannot determine base prompt ID for version {version_id}.")
 
-    # 2. Find the current latest version for this base_prompt_id
+    # 2. Find the current *non-deleted* latest version for this base_prompt_id
+    latest_filter = {"base_prompt_id": base_prompt_id, "is_latest": True, "is_deleted": {"$ne": True}}
+    logger.info(f"---> save_new_version: Finding current latest with filter: {latest_filter}")
     current_latest_doc = await db[PROMPT_COLLECTION].find_one(
-        {"base_prompt_id": base_prompt_id, "is_latest": True}
+        latest_filter
     )
+    logger.info(f"---> save_new_version: Found current_latest_doc: {current_latest_doc}")
+
     # It's possible current_latest_doc is None if DB is inconsistent, handle defensively
     current_version_str = current_latest_doc.get("version", "0.0") if current_latest_doc else "0.0"
+    logger.info(f"---> save_new_version: Determined current_version_str: {current_version_str}")
 
     # 3. Increment version number
     try:
@@ -216,6 +270,14 @@ async def save_new_version_from_existing(
 
     # 4. Prepare data for the NEW version document
     new_version_data = prompt_update.model_dump(exclude_unset=True)
+
+    # Copy language and project from base if not provided in the update payload
+    if "language" not in new_version_data:
+        new_version_data["language"] = base_version_doc.get("language")
+    if "project" not in new_version_data:
+        new_version_data["project"] = base_version_doc.get("project")
+    # --- End field copying ---
+
     new_version_data["base_prompt_id"] = base_prompt_id
     new_version_data["version"] = next_version_str
     new_version_data["is_latest"] = True
@@ -243,7 +305,9 @@ async def save_new_version_from_existing(
         raise HTTPException(status_code=500, detail="Failed to insert new prompt version.")
 
     # 7. Update the PREVIOUS latest version to set is_latest=False
+    logger.info(f"---> save_new_version: Checking if current_latest_doc exists to update previous. Exists: {current_latest_doc is not None}")
     if current_latest_doc:
+        logger.info(f"---> save_new_version: Entering block to update previous latest (ID: {current_latest_doc.get('_id')})")
         previous_latest_id = current_latest_doc["_id"]
         update_filter = {"_id": previous_latest_id}
         # --- Use the original update payload including timestamp --- M
@@ -299,18 +363,51 @@ async def save_new_version_from_existing(
 async def delete_prompt(
     prompt_id: PyObjectId,
     db: AsyncIOMotorDatabase = Depends(get_database),
+    current_user: UserModel = Depends(get_current_active_user)
 ):
     """Delete a specific prompt version from the database."""
-    delete_result = await db[PROMPT_COLLECTION].delete_one({"_id": prompt_id})
-
-    if delete_result.deleted_count == 0:
+    # --- ADDED Language Check ---
+    # First, find the prompt to check its language
+    # MODIFIED AGAIN: Use $ne to handle missing is_deleted field
+    prompt_to_delete = await db[PROMPT_COLLECTION].find_one(
+        {"_id": prompt_id, "is_deleted": {"$ne": True}}, # Find if not explicitly deleted
+        {"language": 1, "is_latest": 1} # Also fetch is_latest for potential future use
+    )
+    if not prompt_to_delete:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Prompt version with ID {prompt_id} not found",
+            detail=f"Prompt version with ID {prompt_id} not found or already deleted",
+        )
+    if prompt_to_delete.get("language") != current_user.language:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="User cannot delete a prompt from a different language",
+        )
+
+    # --- MODIFIED: Perform soft delete --- M
+    now = datetime.utcnow()
+    update_result = await db[PROMPT_COLLECTION].update_one(
+        {"_id": prompt_id},
+        {"$set": {"is_deleted": True, "deleted_at": now, "is_latest": False}} # Also mark as not latest
+    )
+
+    # Check if the update operation modified any document
+    if update_result.modified_count == 0:
+        # This might happen if the prompt was deleted between the find and update, or if already deleted
+        # Re-check if it exists but is deleted
+        check_deleted = await db[PROMPT_COLLECTION].find_one({"_id": prompt_id, "is_deleted": True})
+        if check_deleted:
+             # Already deleted, consider it a success for idempotency?
+             return None # FastAPI handles None return with 204 status correctly
+        else:
+            # Really not found or other issue
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Prompt version with ID {prompt_id} not found or could not be marked as deleted",
         )
 
     # No content to return on successful deletion
-    return 
+    return None # FastAPI handles None return with 204 status correctly
 
 # --- NEW: Endpoint to get all versions for a base prompt --- M
 @router.get(
@@ -323,29 +420,64 @@ async def delete_prompt(
 async def get_prompt_versions(
     base_prompt_id: PyObjectId,
     db: AsyncIOMotorDatabase = Depends(get_database),
+    current_user: UserModel = Depends(get_current_active_user)
 ):
     """Retrieve all versions for a given base prompt ID, sorted newest first by creation date."""
-    # Find all documents matching the base_prompt_id
-    versions_cursor = db[PROMPT_COLLECTION].find(
-        {"base_prompt_id": base_prompt_id}
-    ).sort("created_at", -1) # Sort newest first
+    logger.info(f"---> get_prompt_versions: Received base_prompt_id: {base_prompt_id} (Type: {type(base_prompt_id)}) from URL")
+    # --- ADDED Language Check ---
+    # Need to check the language of *any* non-deleted version associated with this base_prompt_id
+    # Fetch one document just to check language (assuming all versions have the same language)
+    check_filter = {"base_prompt_id": base_prompt_id, "is_deleted": {"$ne": True}}
+    logger.info(f"---> get_prompt_versions: Checking existence with filter: {check_filter}")
+    one_version_doc = await db[PROMPT_COLLECTION].find_one(
+        check_filter,
+        {"language": 1}
+    )
+    logger.info(f"---> get_prompt_versions: find_one result for check: {one_version_doc}")
 
-    versions_raw = await versions_cursor.to_list(length=None) # Get all versions
-
-    if not versions_raw:
+    if not one_version_doc:
+        logger.error(f"---> get_prompt_versions: base_prompt_id {base_prompt_id} evaluated as NOT FOUND by initial check.")
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"No prompt versions found for base ID '{base_prompt_id}'",
+            detail=f"No active prompt versions found for base ID '{base_prompt_id}'",
+        )
+    # Check language against current user
+    logger.info(f"---> get_prompt_versions: Checking language. Found: {one_version_doc.get('language')}, User: {current_user.language} (User ID: {current_user.id})")
+    if one_version_doc.get("language") != current_user.language:
+         raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="User cannot view prompt versions from a different language",
+        )
+    # --- End Language Check ---
+
+    logger.info(f"---> get_prompt_versions: Proceeding to find all versions for base ID: {base_prompt_id}")
+    # Find ALL non-deleted documents matching the base_prompt_id
+    versions_cursor = db[PROMPT_COLLECTION].find(
+        {"base_prompt_id": base_prompt_id, "is_deleted": {"$ne": True}}
+    ).sort("created_at", -1)
+    versions_raw = await versions_cursor.to_list(length=None)
+    logger.info(f"---> get_prompt_versions: Found {len(versions_raw)} raw documents in total.")
+
+    # This is the only other place a 404 could occur
+    if not versions_raw:
+        logger.error(f"---> get_prompt_versions: versions_raw is EMPTY, raising 404!")
+        # This would only happen if find_one found a doc but find didn't, which is highly unlikely
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"No prompt versions found for base ID '{base_prompt_id}'", # Message slightly different!
         )
 
+    logger.info(f"---> get_prompt_versions: Starting validation loop for {len(versions_raw)} documents.")
     # Validate each version document
     validated_versions = []
     for doc in versions_raw:
         try:
             validated_versions.append(Prompt.model_validate(doc))
         except Exception as e:
-            logger.error(f"Failed to validate prompt version document with _id {doc.get('_id')} for base {base_prompt_id}: {e}")
+            # Log the specific document that failed validation
+            logger.error(f"---> get_prompt_versions: Failed validation for doc _id={doc.get('_id')}: {e} --- Document: {doc}")
             # Skip invalid docs for this response
 
+    logger.info(f"---> get_prompt_versions: Finished validation. Returning {len(validated_versions)} validated versions.")
     return validated_versions
 # --- End NEW Endpoint --- 

@@ -79,6 +79,16 @@ export type EvaluationResult = {
   score: number | null;
   comment: string | null;
   created_at: string;
+  // --- Add LLM Judge Fields --- M
+  llm_judge_score?: number | null;
+  llm_judge_rationale?: string | null;
+  llm_judge_model_id?: string | null;
+  // --- Sent Prompt Fields --- M
+  sent_system_prompt?: string | null;
+  sent_user_prompt?: string | null;
+  prompt_token_count?: number | null;
+  // --- End Sent Prompt Fields ---
+  // --- End Add --- M
 }
 
 // For representing saved evaluation sessions
@@ -92,6 +102,7 @@ export type EvaluationSessionConfigColumn = {
 export type EvaluationSessionTestItem = {
   sourceText: string;
   referenceText: string | null;
+  additional_instructions?: string | null;
 }
 
 export type EvaluationSessionConfig = {
@@ -108,6 +119,11 @@ export type EvaluationSessionResultItem = { // Renamed to avoid conflict
   modelOutput: string | null;
   score: number | null;
   comment: string | null;
+  // --- Add LLM Judge Fields --- M
+  llm_judge_score?: number | null;
+  llm_judge_rationale?: string | null;
+  llm_judge_model_id?: string | null;
+  // --- End Add --- M
 }
 
 export type EvaluationSession = {
@@ -126,4 +142,34 @@ export type EvaluationSessionSummary = {
   saved_at: string;
 }
 
+// --- NEW: Evaluation Run Type --- M
+// Represents an ongoing or completed evaluation run (from /evaluations endpoint)
+export type Evaluation = {
+  id: string;
+  prompt_ids: string[]; // List of prompt version IDs used
+  test_set_name: string | null;
+  status: string; // e.g., pending, running, completed, failed
+  user_id?: string | null; // Add user_id (optional for type safety)
+  created_at: string;
+  completed_at: string | null;
+  total_prompt_tasks?: number | null; // Optional counters
+  completed_prompt_tasks?: number | null;
+  // Does NOT include test_set_data or results by default
+  // --- Add LLM Judge Status Fields --- M
+  judge_status?: string | null; // e.g., not_started, pending, completed, failed
+  judged_at?: string | null;
+  // --- End Add --- M
+}
+// --- End NEW Type ---
+
 // --- End Evaluation Types ---
+
+// --- User Type (from backend response model) --- M
+export type User = {
+  id: string;
+  username: string;
+  language: string;
+  disabled: boolean | null;
+  // Add other fields if needed later (e.g., created_at)
+}
+// --- End User Type ---

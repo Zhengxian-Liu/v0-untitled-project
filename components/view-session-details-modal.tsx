@@ -107,14 +107,27 @@ export function ViewSessionDetailsModal({ session, isOpen, onOpenChange }: ViewS
                                             return (
                                                 <TableCell key={`result-cell-${rowIndex}-${colIndex}`} className="align-top">
                                                     {result ? (
-                                                        <div>
+                                                        <div className="space-y-1">
+                                                            {/* Model Output */}
                                                             <p className="mb-1">{result.modelOutput || "(No Output)"}</p>
-                                                            { (result.score || result.comment) &&
+
+                                                            {/* Manual Score/Comment */}
+                                                            {(result.score !== null || result.comment) && (
                                                                 <div className="text-xs border-t pt-1 mt-1 text-muted-foreground">
-                                                                    {result.score && <Badge variant="outline">Score: {result.score}</Badge>}
+                                                                    {result.score !== null && <Badge variant="outline" className="mr-1">Manual Score: {result.score}</Badge>}
                                                                     {result.comment && <p className="mt-1 italic">Comment: {result.comment}</p>}
                                                                 </div>
-                                                            }
+                                                            )}
+
+                                                            {/* LLM Judge Score/Rationale */}
+                                                            {(result.llm_judge_score !== null || result.llm_judge_rationale) && (
+                                                                <div className="text-xs border-t border-dashed pt-1 mt-1 text-muted-foreground">
+                                                                    {result.llm_judge_score !== null && <Badge variant="secondary" className="mr-1">LLM Score: {result.llm_judge_score.toFixed(1)}</Badge>}
+                                                                    {result.llm_judge_rationale && <p className="mt-1"><span className="font-medium">Rationale:</span> {result.llm_judge_rationale}</p>}
+                                                                    {/* Optionally display judge model ID */}
+                                                                    {/* result.llm_judge_model_id && <p className="mt-1 text-gray-400 text-[10px]">Judge Model: {result.llm_judge_model_id}</p> */}
+                                                                </div>
+                                                            )}
                                                         </div>
                                                     ) : (
                                                         <span className="text-muted-foreground">-</span>

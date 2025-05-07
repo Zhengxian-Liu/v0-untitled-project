@@ -11,29 +11,38 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import type React from "react"
+import type { User } from "@/types"
 
-// --- Define Props --- M
+// --- Update Props: No longer needs setCurrentLanguage --- M
 interface MainNavProps {
   currentLanguage: string;
-  setCurrentLanguage: (lang: string) => void;
+  // setCurrentLanguage: (lang: string) => void;
+  // Add user/logout later?
+  user: User | null;
+  logout: () => void;
 }
 
-export function MainNav({ currentLanguage, setCurrentLanguage }: MainNavProps) {
-  // --- Map workspace values to language codes --- M
-  const workspaceToLang: { [key: string]: string } = {
-    japanese: "ja",
-    spanish: "es",
-    french: "fr",
-    german: "de",
-    // Add other languages as needed
-  };
-  const langToWorkspace = Object.fromEntries(Object.entries(workspaceToLang).map(([k, v]) => [v, k]));
-  // --- End Map ---
+// --- Define language list locally for display --- M
+const availableLanguages = [
+  { id: "en", name: "English" },
+  { id: "ja", name: "Japanese" },
+  { id: "ko", name: "Korean" },
+  { id: "zh", name: "Chinese" },
+  { id: "fr", name: "French" },
+  { id: "de", name: "German" },
+  { id: "es", name: "Spanish" },
+  { id: "it", name: "Italian" },
+  { id: "ru", name: "Russian" },
+  { id: "pt", name: "Portuguese" },
+];
+// --- End Define ---
 
-  const handleLanguageChange = (workspaceValue: string) => {
-    const langCode = workspaceToLang[workspaceValue] || "en"; // Default to 'en' if mapping fails
-    setCurrentLanguage(langCode);
-  };
+export function MainNav({ currentLanguage, user, logout }: MainNavProps) {
+
+  // Remove language mapping logic
+  // const workspaceToLang = { ... };
+  // const langToWorkspace = { ... };
+  // const handleLanguageChange = (workspaceValue: string) => { ... };
 
   return (
     <header className="border-b">
@@ -42,43 +51,38 @@ export function MainNav({ currentLanguage, setCurrentLanguage }: MainNavProps) {
           <Link href="/" className="font-semibold text-xl">
             PromptCraft
           </Link>
-          <Select
-            value={langToWorkspace[currentLanguage] || "japanese"}
-            onValueChange={handleLanguageChange}
-          >
-            <SelectTrigger className="w-[180px]">
-              <SelectValue placeholder="Select workspace" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="japanese">Japanese Workspace</SelectItem>
-              <SelectItem value="spanish">Spanish Workspace</SelectItem>
-              <SelectItem value="french">French Workspace</SelectItem>
-              <SelectItem value="german">German Workspace</SelectItem>
-            </SelectContent>
-          </Select>
+          {/* Display Current Language from Context */}
+          <span className="text-sm font-medium text-muted-foreground border rounded px-2 py-1">
+             Workspace: {currentLanguage ? (availableLanguages.find(l => l.id === currentLanguage)?.name || currentLanguage) : '...'}
+          </span>
+          {/* --- Remove Language Selector --- M */}
+          {/* <Select ... > ... </Select> */}
+          {/* --- End Remove ---
         </div>
         <div className="ml-auto flex items-center gap-4">
-          <DropdownMenu>
+           {/* Update User Menu */}
+           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" className="relative h-8 w-8 rounded-full">
                 <Avatar className="h-8 w-8">
-                  <AvatarImage src="/placeholder.svg?height=32&width=32" alt="User" />
-                  <AvatarFallback>JD</AvatarFallback>
+                  {/* Use initials or placeholder */}
+                  <AvatarFallback>{user?.username?.substring(0, 2).toUpperCase() || '??'}</AvatarFallback>
                 </Avatar>
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent className="w-56" align="end" forceMount>
               <DropdownMenuLabel className="font-normal">
                 <div className="flex flex-col space-y-1">
-                  <p className="text-sm font-medium leading-none">John Doe</p>
-                  <p className="text-xs leading-none text-muted-foreground">john.doe@example.com</p>
+                  <p className="text-sm font-medium leading-none">{user?.username || 'User'}</p>
+                  <p className="text-xs leading-none text-muted-foreground">Lang: {currentLanguage || 'N/A'}</p>
                 </div>
               </DropdownMenuLabel>
               <DropdownMenuSeparator />
-              <DropdownMenuItem>Profile</DropdownMenuItem>
-              <DropdownMenuItem>Settings</DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem>Log out</DropdownMenuItem>
+              {/* Add Profile/Settings links later */}
+              {/* <DropdownMenuItem>Profile</DropdownMenuItem> */}
+              {/* <DropdownMenuItem>Settings</DropdownMenuItem> */}
+              {/* <DropdownMenuSeparator /> */}
+              <DropdownMenuItem onClick={logout}>Log out</DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
         </div>

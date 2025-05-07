@@ -43,6 +43,11 @@ class EvaluationSessionResult(BaseModel):
     modelOutput: Optional[str] = None
     score: Optional[int] = None
     comment: Optional[str] = None
+    # --- Add LLM Judge Fields --- M
+    llm_judge_score: Optional[float] = None
+    llm_judge_rationale: Optional[str] = None
+    llm_judge_model_id: Optional[str] = None
+    # --- End Add --- M
     model_config = ConfigDict(
         arbitrary_types_allowed=True,
         json_encoders={ObjectId: str, PyObjectId: str}
@@ -59,13 +64,12 @@ class EvaluationSessionBase(BaseModel):
     # Maybe add a user-provided name/description for the saved session?
     session_name: str = Field(default="Saved Evaluation Session", max_length=150)
     session_description: Optional[str] = Field(None, max_length=500)
+    saved_at: datetime = Field(default_factory=datetime.utcnow)
+    user_id: PyObjectId # ADDED: Reference to the user who saved it
 
 class EvaluationSessionInDB(EvaluationSessionBase):
     """Model representing a saved evaluation session in MongoDB."""
     id: PyObjectId = Field(default_factory=PyObjectId, validation_alias="_id")
-    saved_at: datetime = Field(default_factory=datetime.utcnow)
-    # Optional: Link back to user who saved it later
-    # user_id: Optional[str] = None
 
     model_config = ConfigDict(
         populate_by_name=True,

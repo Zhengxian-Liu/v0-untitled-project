@@ -53,13 +53,15 @@ class PromptBase(BaseModel):
     text: Optional[str] = Field(None, description="Optional: Assembled text content of the prompt.")
     tags: List[str] = Field(default_factory=list, description="Tags associated with the prompt.")
     project: Optional[str] = Field(None, description="Associated project identifier (e.g., 'genshin').")
-    language: Optional[str] = Field(None, description="Associated language identifier (e.g., 'en').")
     isProduction: bool = Field(default=False, description="Indicates if this version is the production one for its project/language.")
     version: str = Field(default="1.0", description="Version string for this specific prompt version.")
     # --- Versioning Fields --- M
     base_prompt_id: Optional[PyObjectId] = Field(None, description="Identifier linking versions of the same conceptual prompt.")
     is_latest: bool = Field(default=True, description="Indicates if this is the latest saved version of the prompt.")
     # --- End Versioning Fields ---
+    is_deleted: bool = False
+    deleted_at: Optional[datetime] = None
+    language: Optional[str] = Field(None, max_length=10, description="Associated language identifier (e.g., 'en').")
 
 class PromptCreate(PromptBase):
     """Properties to receive via API on creation of the *first* version."""
@@ -84,7 +86,6 @@ class PromptUpdate(BaseModel):
     text: Optional[str] = None
     tags: Optional[List[str]] = None
     project: Optional[str] = None
-    language: Optional[str] = None
     isProduction: Optional[bool] = None
     # Version is handled automatically by backend, don't allow update here
     # version: Optional[str] = None
@@ -98,6 +99,7 @@ class PromptInDBBase(PromptBase):
     )
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
+    language: Optional[str] = Field(None, description="Associated language identifier (e.g., 'en').")
 
     model_config = ConfigDict(
         arbitrary_types_allowed=True,

@@ -19,7 +19,7 @@ const inter = localFont({
 
 export const metadata: Metadata = {
   title: "PromptCraft",
-  description: "Internal tool for localization translators to create, test, and evaluate AI translation prompts",
+  description: "供本地化译员创建、测试和评估 AI 翻译提示的内部工具",
     generator: 'v0.dev'
 }
 
@@ -29,7 +29,7 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="en" className={inter.variable} suppressHydrationWarning>
+    <html lang="zh-CN" className={inter.variable} suppressHydrationWarning>
       <body className={inter.className}>
         <AuthProvider>
           <ThemeProvider attribute="class" defaultTheme="light" enableSystem disableTransitionOnChange>

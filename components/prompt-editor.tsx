@@ -66,97 +66,97 @@ type Snippet = {
 const templates: Template[] = [
   {
     id: "1",
-    name: "Basic Translation Template",
-    description: "A simple template for general translation tasks",
-    text: "You are a translator specializing in [SOURCE_LANGUAGE] to [TARGET_LANGUAGE] translations. Translate the following text, maintaining the original meaning, tone, and style as closely as possible.",
+    name: "基本翻译模板",
+    description: "用于常规翻译任务的简单模板",
+    text: "您是一位专注于[源语言]到[目标语言]翻译的译者。请翻译以下文本，并尽可能保持原文的含义、语气和风格。",
   },
   {
     id: "2",
-    name: "Technical Documentation Template",
-    description: "Optimized for technical content translation",
-    text: "You are a technical translator specializing in [SOURCE_LANGUAGE] to [TARGET_LANGUAGE] translations. Translate the following technical documentation, maintaining all technical terminology accurately. Preserve formatting such as bullet points and numbered lists.",
+    name: "技术文档模板",
+    description: "针对技术内容翻译优化",
+    text: "您是一位专注于[源语言]到[目标语言]翻译的技术译者。请翻译以下技术文档，并准确保留所有技术术语。请保留项目符号和编号列表等格式。",
   },
 ]
 
 const snippets: Snippet[] = [
   {
     id: "1",
-    name: "Preserve Formatting",
-    text: "Preserve all formatting including bullet points, numbered lists, and paragraph breaks.",
+    name: "保留格式",
+    text: "请保留所有格式，包括项目符号、编号列表和段落换行。",
   },
   {
     id: "2",
-    name: "Cultural Adaptation",
-    text: "Adapt any cultural references to be appropriate for the target audience while maintaining the original meaning.",
+    name: "文化本地化",
+    text: "请对任何文化参考进行调整，使其适合目标受众，同时保持原文含义。",
   },
 ]
 
-const availableTags = ["Technical", "Marketing", "Legal", "Conversational", "Formal", "Casual"]
+const availableTags = ["技术", "营销", "法律", "对话", "正式", "休闲"]
 
 const availableProjects = [
-  { id: "genshin", name: "Genshin" },
-  { id: "honkai", name: "Honkai: Starrail" },
-  { id: "zenless", name: "Zenless Zone Zero" },
+  { id: "genshin", name: "原神" },
+  { id: "honkai", name: "崩坏：星穹铁道" },
+  { id: "zenless", name: "绝区零" },
 ]
 
 const availableLanguages = [
-  { id: "en", name: "English" },
-  { id: "ja", name: "Japanese" },
-  { id: "ko", name: "Korean" },
-  { id: "zh", name: "Chinese" },
-  { id: "fr", name: "French" },
-  { id: "de", name: "German" },
-  { id: "es", name: "Spanish" },
-  { id: "it", name: "Italian" },
-  { id: "ru", name: "Russian" },
-  { id: "pt", name: "Portuguese" },
+  { id: "en", name: "英语" },
+  { id: "ja", name: "日语" },
+  { id: "ko", name: "韩语" },
+  { id: "zh", name: "中文" },
+  { id: "fr", name: "法语" },
+  { id: "de", name: "德语" },
+  { id: "es", name: "西班牙语" },
+  { id: "it", name: "意大利语" },
+  { id: "ru", name: "俄语" },
+  { id: "pt", name: "葡萄牙语" },
 ]
 
 const sectionTypes = [
-  { id: "role", name: "Role Definition" },
-  { id: "context", name: "Context" },
-  { id: "instructions", name: "Instructions" },
-  { id: "examples", name: "Examples" },
-  { id: "output", name: "Output Requirements" },
-  { id: "constraints", name: "Constraints" },
-  { id: "custom", name: "Custom Section" },
+  { id: "role", name: "角色定义" },
+  { id: "context", name: "上下文" },
+  { id: "instructions", name: "说明" },
+  { id: "examples", name: "示例" },
+  { id: "output", name: "输出要求" },
+  { id: "constraints", name: "限制" },
+  { id: "custom", name: "自定义部分" },
 ]
 
 // Mock saved sections that could be reused across prompts
 const mockSavedSections: SavedSection[] = [
   {
     id: "1",
-    name: "Standard Translator Role",
+    name: "标准译者角色",
     type: "role",
     content:
-      "You are a professional translator specializing in game localization from [SOURCE_LANGUAGE] to [TARGET_LANGUAGE].",
+      "您是一位专业的翻译人员，专注于将游戏从[源语言]本地化为[目标语言]。",
   },
   {
     id: "2",
-    name: "Character Voice Preservation",
+    name: "保留角色语音",
     type: "instructions",
     content:
-      "Maintain the character's unique voice and personality traits in the translation. Pay special attention to speech patterns, catchphrases, and verbal tics that define the character.",
+      "在翻译中保持角色独特的语音和个性特征。请特别注意定义角色的说话模式、口头禅和语言习惯。",
   },
   {
     id: "3",
-    name: "Game Terminology Consistency",
+    name: "游戏术语一致性",
     type: "context",
     content:
-      "This game uses specific terminology for items, abilities, and locations. Refer to the glossary and ensure consistent translation of these terms.",
+      "此游戏对物品、技能和地点使用特定术语。请参考词汇表并确保这些术语的翻译一致。",
   },
   {
     id: "4",
-    name: "Dialogue Example",
+    name: "对话示例",
     type: "examples",
     content:
-      'Source: "さあ、冒険を始めよう！"\nTranslation: "Now, let\'s begin our adventure!"\n\nSource: "この剣の力を見せてやる！"\nTranslation: "I\'ll show you the power of this sword!"',
+      '\'\'\'源文："さあ、冒険を始めよう！"\n译文："那么，开始我们的冒险吧！"\n\n源文："この剣の力を見せてやる！"\n译文："就让你见识一下这把剑的力量！"\'\'\'',
   },
   {
     id: "5",
-    name: "Standard Output Format",
+    name: "标准输出格式",
     type: "output",
-    content: "Provide translations in the following format:\n1. Source text\n2. Translation\n3. Notes (if any)",
+    content: "请按以下格式提供翻译：\n1. 源文本\n2. 译文\n3. 注释（如有）",
   },
 ]
 
@@ -167,21 +167,21 @@ const mockProductionPrompts: ProductionPrompt[] = [
     project: "genshin",
     language: "ja",
     promptId: "1",
-    promptName: "Technical Documentation Translation",
+    promptName: "技术文档翻译",
   },
   {
     id: "prod2",
     project: "honkai",
     language: "fr",
     promptId: "2",
-    promptName: "Marketing Content Translation",
+    promptName: "营销内容翻译",
   },
   {
     id: "prod3",
     project: "zenless",
     language: "es",
     promptId: "3",
-    promptName: "Legal Document Translation",
+    promptName: "法律文件翻译",
   },
 ]
 
@@ -204,9 +204,9 @@ export function PromptEditor({ prompt, onSaveSuccess, currentLanguage }: PromptE
   const [selectedTags, setSelectedTags] = useState<string[]>([])
   const [version, setVersion] = useState("1.0")
   const [sections, setSections] = useState<PromptSection[]>([
-    { id: "1", type: "role", name: "Role Definition", content: "" },
-    { id: "2", type: "context", name: "Context", content: "" },
-    { id: "3", type: "instructions", name: "Instructions", content: "" },
+    { id: "1", type: "role", name: "角色定义", content: "" },
+    { id: "2", type: "context", name: "上下文", content: "" },
+    { id: "3", type: "instructions", name: "说明", content: "" },
   ])
   const [showSaveSectionDialog, setShowSaveSectionDialog] = useState(false)
   const [sectionToSave, setSectionToSave] = useState<PromptSection | null>(null)
@@ -243,12 +243,12 @@ export function PromptEditor({ prompt, onSaveSuccess, currentLanguage }: PromptE
       // Sort history newest first (optional, backend might already do this)
       historyData.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
       setVersionHistory(historyData);
-      console.log("Fetched version history: ", historyData);
+      console.log("获取版本历史记录时出错:", historyData);
     } catch (err) {
-      console.error("Error fetching version history:", err);
-      const errorMsg = err instanceof Error ? err.message : "Unknown error";
+      console.error("获取版本历史记录时出错:", err);
+      const errorMsg = err instanceof Error ? err.message : "未知错误";
       setHistoryError(errorMsg);
-      toast.error(`Failed to load version history: ${errorMsg}`);
+      toast.error(`加载版本历史记录失败： ${errorMsg}`);
       setVersionHistory([]); // Clear history on error
     } finally {
       setIsLoadingHistory(false);
@@ -277,8 +277,8 @@ export function PromptEditor({ prompt, onSaveSuccess, currentLanguage }: PromptE
          fetchVersionHistory(prompt.base_prompt_id);
       } else {
          // This case shouldn't happen if prompts are created correctly
-         console.warn("Prompt loaded in editor is missing base_prompt_id! Cannot fetch history.");
-         setHistoryError("Cannot fetch history: Prompt base ID missing.");
+         console.warn("编辑器中加载的提示缺少 base_prompt_id！无法获取历史记录。");
+         setHistoryError("无法获取历史记录：提示基本 ID 缺失。");
       }
       // --- End fetch --- M
     } else {
@@ -290,9 +290,9 @@ export function PromptEditor({ prompt, onSaveSuccess, currentLanguage }: PromptE
       setSelectedProject(undefined)
       setVersion("1.0")
       setSections([
-        { id: "1", type: "role", name: "Role Definition", content: "" },
-        { id: "2", type: "context", name: "Context", content: "" },
-        { id: "3", type: "instructions", name: "Instructions", content: "" },
+        { id: "1", type: "role", name: "角色定义", content: "" },
+        { id: "2", type: "context", name: "上下文", content: "" },
+        { id: "3", type: "instructions", name: "说明", content: "" },
       ])
       // --- Clear loaded ID for new prompt --- M
       setCurrentlyLoadedVersionId(null);
@@ -309,10 +309,10 @@ export function PromptEditor({ prompt, onSaveSuccess, currentLanguage }: PromptE
         const data = await apiClient<PromptStructure>("/prompt-structure"); // Assumes API endpoint is /api/v1/prompt-structure
         setPromptStructure(data);
       } catch (err) {
-        console.error("Error fetching prompt structure:", err);
-        const errorMsg = err instanceof Error ? err.message : "Unknown error fetching prompt structure";
+        console.error("获取提示结构时出错:", err);
+        const errorMsg = err instanceof Error ? err.message : "发生未知错误";
         setStructureError(errorMsg);
-        toast.error(`Failed to load prompt structure: ${errorMsg}`);
+        toast.error(`加载提示结构失败： ${errorMsg}`);
         setPromptStructure(null); // Clear structure on error
       } finally {
         setIsLoadingStructure(false);
@@ -337,7 +337,7 @@ export function PromptEditor({ prompt, onSaveSuccess, currentLanguage }: PromptE
           if (error.message.includes("404")) { // Check error message for 404
             setCurrentProductionPrompt(null);
           } else {
-            console.error("Error fetching production prompt status:", error);
+            console.error("获取生产提示状态时出错:", error);
             setCurrentProductionPrompt(null);
           }
         } finally { setIsLoadingProductionCheck(false); }
@@ -362,7 +362,7 @@ export function PromptEditor({ prompt, onSaveSuccess, currentLanguage }: PromptE
     // Update the tracker for which version is currently loaded
     setCurrentlyLoadedVersionId(selectedPrompt.id);
 
-    toast.info(`Loaded version ${selectedPrompt.version}`);
+    toast.info(`已加载版本 ${selectedPrompt.version}`);
   };
   // --- End Version Select Handler ---
 
@@ -381,7 +381,7 @@ export function PromptEditor({ prompt, onSaveSuccess, currentLanguage }: PromptE
       newSections[0].content = template.text
       setSections(newSections)
     } else {
-      setSections([{ id: "1", type: "instructions", name: "Instructions", content: template.text }])
+      setSections([{ id: "1", type: "instructions", name: "说明", content: template.text }])
     }
   }
 
@@ -440,7 +440,7 @@ export function PromptEditor({ prompt, onSaveSuccess, currentLanguage }: PromptE
 
   const handleAddSection = () => {
     const newId = Date.now().toString()
-    setSections([...sections, { id: newId, type: "custom", name: "New Section", content: "" }])
+    setSections([...sections, { id: newId, type: "custom", name: "新部分", content: "" }])
   }
 
   const handleDeleteSection = (sectionId: string) => {
@@ -470,7 +470,7 @@ export function PromptEditor({ prompt, onSaveSuccess, currentLanguage }: PromptE
 
   const confirmSaveSection = () => {
     // In a real app, this would save to a database
-    console.log("Saving section:", { ...sectionToSave, name: newSectionName })
+    console.log("正在保存部分:", { ...sectionToSave, name: newSectionName })
     setShowSaveSectionDialog(false)
   }
 
@@ -550,7 +550,7 @@ export function PromptEditor({ prompt, onSaveSuccess, currentLanguage }: PromptE
       .join("\n\n");
     // Combine and highlight
     // +++ UPDATE: Use fetched template M +++
-    const fullSystemPrompt = `${rules}\n\n${promptStructure?.output_requirement || "Error loading output requirement..."}`;
+    const fullSystemPrompt = `${rules}\n\n${promptStructure?.output_requirement || "加载输出要求时出错..."}`;
     // +++ END UPDATE +++
     console.log("Assembled System Prompt Preview:", fullSystemPrompt);
     return highlightVariables(fullSystemPrompt);
@@ -558,7 +558,7 @@ export function PromptEditor({ prompt, onSaveSuccess, currentLanguage }: PromptE
 
   const assembleUserPromptPreview = () => {
     // +++ UPDATE: Use fetched template M +++
-    let userPrompt = promptStructure?.task_info || "Error loading task info...";
+    let userPrompt = promptStructure?.task_info || "加载任务信息时出错...";
     // +++ END UPDATE +++
     userPrompt = userPrompt.replace("{TARGET_LANGUAGE}", currentLanguage || "{TARGET_LANGUAGE}");
     // Highlight after substitution
@@ -578,8 +578,8 @@ export function PromptEditor({ prompt, onSaveSuccess, currentLanguage }: PromptE
 
     // Add a check for PUT if the loaded ID is missing (shouldn't happen)
     if (method === "PUT" && !currentlyLoadedVersionId) {
-        toast.error("Cannot save: No base version loaded in the editor.");
-        console.error("Save aborted: currentlyLoadedVersionId is null for PUT request.");
+        toast.error("无法保存：编辑器中未加载基本版本。");
+        console.error("保存中止：PUT 请求的 currentlyLoadedVersionId 为空。");
         return;
     }
 
@@ -613,8 +613,8 @@ export function PromptEditor({ prompt, onSaveSuccess, currentLanguage }: PromptE
       });
       // --- End Use --- M
       const successMessage = isCreatingNew
-        ? `Prompt created successfully as version ${savedPromptVersion.version}!`
-        : `Prompt saved successfully as new version ${savedPromptVersion.version}!`;
+        ? `提示已成功创建为版本 ${savedPromptVersion.version}！`
+        : `提示已成功保存为新版本 ${savedPromptVersion.version}！`;
       toast.success(successMessage);
 
       // Update local state
@@ -632,8 +632,8 @@ export function PromptEditor({ prompt, onSaveSuccess, currentLanguage }: PromptE
       }
 
     } catch (error) {
-      console.error(`Error ${isCreatingNew ? 'creating' : 'saving'} prompt:`, error);
-      toast.error(`Failed to ${isCreatingNew ? 'create' : 'save'} prompt: ${error instanceof Error ? error.message : error}`);
+      console.error(`创建/保存提示时出错 ${isCreatingNew ? '' : ''}:`, error);
+      toast.error(`创建/保存提示失败 ${isCreatingNew ? '' : ''}: ${error instanceof Error ? error.message : error}`);
     }
   };
 
@@ -657,7 +657,7 @@ export function PromptEditor({ prompt, onSaveSuccess, currentLanguage }: PromptE
         return section;
       }),
     );
-    toast.info(`Template "${template.name}" inserted.`);
+    toast.info(`模板 "${template.name}" 已插入。`);
   };
   // +++ END ADD +++
 
@@ -665,19 +665,19 @@ export function PromptEditor({ prompt, onSaveSuccess, currentLanguage }: PromptE
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h2 className="text-2xl font-bold tracking-tight">
-          {prompt ? `Editing: ${prompt.name}` : "Create New Prompt"}
+          {prompt ? `编辑中: ${prompt.name}` : "创建新提示"}
         </h2>
         <div className="flex items-center gap-2">
           <Button variant="outline" size="sm" onClick={() => {
               console.log("[PromptEditor] Toggle Preview Button Clicked. Current showPreview:", showPreview);
               setShowPreview(!showPreview);
           }}>
-            {showPreview ? "Hide Preview" : "Show Preview"}
+            {showPreview ? "隐藏预览" : "显示预览"}
           </Button>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="outline" size="sm" className="h-9">
-                Version: {version}
+                版本: {version}
                 {isLoadingHistory ? (
                   <Loader2 className="ml-2 h-4 w-4 animate-spin" />
                 ) : (
@@ -686,12 +686,12 @@ export function PromptEditor({ prompt, onSaveSuccess, currentLanguage }: PromptE
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-64">
-              <div className="px-2 py-1.5 text-sm font-semibold">Version History</div>
+              <div className="px-2 py-1.5 text-sm font-semibold">版本历史</div>
               {historyError && (
                  <div className="px-2 py-1.5 text-sm text-destructive">{historyError}</div>
               )}
               {!isLoadingHistory && !historyError && versionHistory.length === 0 && (
-                <div className="px-2 py-1.5 text-sm text-muted-foreground">(No history found)</div>
+                <div className="px-2 py-1.5 text-sm text-muted-foreground">(未找到历史记录)</div>
               )}
               {!isLoadingHistory && !historyError && versionHistory.map((histPrompt) => (
                 <DropdownMenuItem
@@ -701,9 +701,9 @@ export function PromptEditor({ prompt, onSaveSuccess, currentLanguage }: PromptE
                   disabled={histPrompt.id === currentlyLoadedVersionId}
                 >
                   <span className="mr-auto">
-                    Version {histPrompt.version}
-                    {histPrompt.is_latest && <Badge variant="secondary" className="ml-2">Latest</Badge>}
-                    {histPrompt.isProduction && <Badge variant="destructive" className="ml-2">Prod</Badge>}
+                    版本 {histPrompt.version}
+                    {histPrompt.is_latest && <Badge variant="secondary" className="ml-2">最新</Badge>}
+                    {histPrompt.isProduction && <Badge variant="destructive" className="ml-2">生产</Badge>}
                   </span>
                   <span className="text-xs text-muted-foreground">
                     {new Date(histPrompt.created_at).toLocaleDateString()}
@@ -718,33 +718,33 @@ export function PromptEditor({ prompt, onSaveSuccess, currentLanguage }: PromptE
 
       <div className="grid gap-4">
         <div className="grid gap-2">
-          <Label htmlFor="name">Prompt Name</Label>
-          <Input id="name" value={name} onChange={(e) => setName(e.target.value)} placeholder="Enter prompt name" />
+          <Label htmlFor="name">提示名称</Label>
+          <Input id="name" value={name} onChange={(e) => setName(e.target.value)} placeholder="输入提示名称" />
         </div>
 
         <div className="grid gap-2">
-          <Label htmlFor="description">Description</Label>
+          <Label htmlFor="description">描述</Label>
           <Textarea
             id="description"
             value={description}
             onChange={(e) => setDescription(e.target.value)}
-            placeholder="Enter a short description"
+            placeholder="输入简短描述"
             rows={2}
           />
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="grid gap-2">
-            <Label htmlFor="project">Project</Label>
+            <Label htmlFor="project">项目</Label>
             <Select
               value={selectedProject ?? SELECT_PLACEHOLDER_VALUE}
               onValueChange={(value) => setSelectedProject(value === SELECT_PLACEHOLDER_VALUE ? undefined : value)}
             >
               <SelectTrigger id="project">
-                <SelectValue placeholder="Select project" />
+                <SelectValue placeholder="选择项目" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value={SELECT_PLACEHOLDER_VALUE}>-- None --</SelectItem>
+                <SelectItem value={SELECT_PLACEHOLDER_VALUE}>-- 无 --</SelectItem>
                 {availableProjects.map((project) => (
                   <SelectItem key={project.id} value={project.id}>
                     {project.name}
@@ -758,12 +758,12 @@ export function PromptEditor({ prompt, onSaveSuccess, currentLanguage }: PromptE
         {showPreview && (
           <Card className="mb-4">
             <CardHeader>
-              <CardTitle>Complete Prompt Preview</CardTitle>
-              <CardDescription>Shows how the prompt components are assembled for the LLM.</CardDescription>
+              <CardTitle>完整提示预览</CardTitle>
+              <CardDescription>显示提示组件如何为 LLM 组装。</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div>
-                <h4 className="font-semibold mb-2 text-muted-foreground">System Prompt Preview:</h4>
+                <h4 className="font-semibold mb-2 text-muted-foreground">系统提示预览:</h4>
                 <div className="bg-muted p-4 rounded-md">
                   <pre className="whitespace-pre-wrap font-mono text-sm overflow-auto max-h-[300px]">
                     {assembleSystemPromptPreview()}
@@ -771,7 +771,7 @@ export function PromptEditor({ prompt, onSaveSuccess, currentLanguage }: PromptE
                 </div>
               </div>
               <div>
-                <h4 className="font-semibold mb-2 text-muted-foreground">User Prompt Preview (Template):</h4>
+                <h4 className="font-semibold mb-2 text-muted-foreground">用户提示预览 (模板):</h4>
                 <div className="bg-muted p-4 rounded-md">
                   <pre className="whitespace-pre-wrap font-mono text-sm overflow-auto max-h-[300px]">
                     {assembleUserPromptPreview()}
@@ -784,18 +784,18 @@ export function PromptEditor({ prompt, onSaveSuccess, currentLanguage }: PromptE
 
         <div className="grid gap-2">
           <div className="flex items-center justify-between">
-            <Label>Prompt Sections</Label>
+            <Label>提示部分</Label>
             <div className="flex gap-2">
               <Dialog open={showInsertSectionDialog} onOpenChange={setShowInsertSectionDialog}>
                 <DialogTrigger asChild>
                   <Button variant="outline" size="sm">
                     <Bookmark className="mr-2 h-4 w-4" />
-                    Insert Saved Section
+                    插入已保存部分
                   </Button>
                 </DialogTrigger>
                 <DialogContent>
                   <DialogHeader>
-                    <DialogTitle>Insert Saved Section</DialogTitle>
+                    <DialogTitle>插入已保存部分</DialogTitle>
                   </DialogHeader>
                   <div className="grid gap-4 py-4 max-h-[400px] overflow-y-auto">
                     {mockSavedSections.map((section) => (
@@ -847,7 +847,7 @@ export function PromptEditor({ prompt, onSaveSuccess, currentLanguage }: PromptE
 
               <Button variant="outline" size="sm" onClick={handleAddSection}>
                 <Plus className="mr-2 h-4 w-4" />
-                Add Section
+                添加部分
               </Button>
             </div>
           </div>
@@ -863,7 +863,7 @@ export function PromptEditor({ prompt, onSaveSuccess, currentLanguage }: PromptE
                         onValueChange={(value) => handleSectionTypeChange(section.id, value)}
                       >
                         <SelectTrigger className="w-[180px]">
-                          <SelectValue placeholder="Section type" />
+                          <SelectValue placeholder="部分类型" />
                         </SelectTrigger>
                         <SelectContent>
                           {sectionTypes.map((type) => (
@@ -878,7 +878,7 @@ export function PromptEditor({ prompt, onSaveSuccess, currentLanguage }: PromptE
                         <Input
                           value={section.name}
                           onChange={(e) => handleSectionNameChange(section.id, e.target.value)}
-                          placeholder="Section name"
+                          placeholder="部分名称"
                           className="flex-1"
                         />
                       )}
@@ -915,7 +915,7 @@ export function PromptEditor({ prompt, onSaveSuccess, currentLanguage }: PromptE
                   <Textarea
                     value={section.content}
                     onChange={(e) => handleSectionContentChange(section.id, e.target.value)}
-                    placeholder={`Enter ${section.name.toLowerCase()} here...`}
+                    placeholder={`在此输入${section.name.toLowerCase()}...`}
                     className="font-mono min-h-[120px]"
                   />
                 </CardContent>
@@ -928,7 +928,7 @@ export function PromptEditor({ prompt, onSaveSuccess, currentLanguage }: PromptE
                         disabled={!predefinedSectionTemplates[section.type] || predefinedSectionTemplates[section.type].length === 0}
                       >
                         <Library className="mr-2 h-4 w-4" />
-                        Insert Template
+                        插入模板
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent>
@@ -942,7 +942,7 @@ export function PromptEditor({ prompt, onSaveSuccess, currentLanguage }: PromptE
                         </DropdownMenuItem>
                       ))}
                       {(!predefinedSectionTemplates[section.type] || predefinedSectionTemplates[section.type].length === 0) && (
-                         <DropdownMenuItem disabled>No templates for this section type</DropdownMenuItem>
+                         <DropdownMenuItem disabled>此部分类型无模板</DropdownMenuItem>
                       )}
                     </DropdownMenuContent>
                   </DropdownMenu>
@@ -950,12 +950,12 @@ export function PromptEditor({ prompt, onSaveSuccess, currentLanguage }: PromptE
                     <DialogTrigger asChild>
                       <Button variant="ghost" size="sm">
                         <Code className="mr-2 h-4 w-4" />
-                        Insert Snippet
+                        插入片段
                       </Button>
                     </DialogTrigger>
                     <DialogContent>
                       <DialogHeader>
-                        <DialogTitle>Insert Snippet</DialogTitle>
+                        <DialogTitle>插入片段</DialogTitle>
                       </DialogHeader>
                       <div className="grid gap-4 py-4">
                         {snippets.map((snippet) => (
@@ -980,7 +980,7 @@ export function PromptEditor({ prompt, onSaveSuccess, currentLanguage }: PromptE
         </div>
 
         <div className="grid gap-2">
-          <Label>Tags</Label>
+          <Label>标签</Label>
           <div className="flex flex-wrap gap-2">
             {availableTags.map((tag) => (
               <Badge
@@ -1005,12 +1005,12 @@ export function PromptEditor({ prompt, onSaveSuccess, currentLanguage }: PromptE
             htmlFor="is-production"
             className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
           >
-            Mark as Production
+            标记为生产
           </label>
-          {isLoadingProductionCheck && <span className="text-sm text-muted-foreground ml-2">(Checking...)</span>}
+          {isLoadingProductionCheck && <span className="text-sm text-muted-foreground ml-2">(检查中...)</span>}
           {!isLoadingProductionCheck && currentProductionPrompt && currentProductionPrompt.id !== prompt?.id && (
             <span className="text-sm text-muted-foreground ml-2">
-              Current production prompt: <span className="font-medium">{currentProductionPrompt.name}</span>
+              当前生产提示: <span className="font-medium">{currentProductionPrompt.name}</span>
             </span>
           )}
         </div>
@@ -1019,36 +1019,36 @@ export function PromptEditor({ prompt, onSaveSuccess, currentLanguage }: PromptE
       <div className="flex items-center gap-2">
         <Button onClick={handleSave}>
           <Save className="mr-2 h-4 w-4" />
-          Save
+          保存
         </Button>
-        <Button variant="outline">Save as New Version</Button>
+        <Button variant="outline">另存为新版本</Button>
         <Button variant="outline">
           <GitBranch className="mr-2 h-4 w-4" />
-          Create Branch
+          创建分支
         </Button>
       </div>
 
       <Dialog open={showSaveSectionDialog} onOpenChange={setShowSaveSectionDialog}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Save Section</DialogTitle>
+            <DialogTitle>保存部分</DialogTitle>
           </DialogHeader>
           <div className="grid gap-4 py-4">
             <div className="grid gap-2">
-              <Label htmlFor="section-name">Section Name</Label>
+              <Label htmlFor="section-name">部分名称</Label>
               <Input
                 id="section-name"
                 value={newSectionName}
                 onChange={(e) => setNewSectionName(e.target.value)}
-                placeholder="Enter a name for this section"
+                placeholder="为此部分输入名称"
               />
             </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowSaveSectionDialog(false)}>
-              Cancel
+              取消
             </Button>
-            <Button onClick={confirmSaveSection}>Save</Button>
+            <Button onClick={confirmSaveSection}>保存</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -1057,24 +1057,24 @@ export function PromptEditor({ prompt, onSaveSuccess, currentLanguage }: PromptE
       <Dialog open={showProductionConfirmDialog} onOpenChange={setShowProductionConfirmDialog}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Change Production Prompt?</DialogTitle>
+            <DialogTitle>更改生产提示?</DialogTitle>
             <DialogDescription>
-              There is already a production prompt ({currentProductionPrompt?.name}) for the selected project and language ({currentLanguage}).
+              对于所选项目和语言 ({currentLanguage})，已存在生产提示 ({currentProductionPrompt?.name})。
             </DialogDescription>
           </DialogHeader>
           <div className="py-4">
             <div className="flex items-center p-4 border rounded-md bg-amber-50 dark:bg-amber-950/20 text-amber-800 dark:text-amber-300">
               <AlertTriangle className="h-5 w-5 mr-2 flex-shrink-0" />
               <div className="text-sm">
-                Continuing will replace the existing production prompt.
+                继续操作将替换现有的生产提示。
               </div>
             </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowProductionConfirmDialog(false)}>
-              Cancel
+              取消
             </Button>
-            <Button onClick={confirmProductionChange}>Confirm Change</Button>
+            <Button onClick={confirmProductionChange}>确认更改</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -1084,12 +1084,12 @@ export function PromptEditor({ prompt, onSaveSuccess, currentLanguage }: PromptE
       <div className="space-y-4">
         <Card className="bg-secondary/30">
           <CardHeader className="pb-2">
-            <CardTitle className="text-base">(System Prompt) Output Requirement (Fixed)</CardTitle>
-            <CardDescription className="text-xs">The model will be instructed to follow this output format.</CardDescription>
+            <CardTitle className="text-base">(系统提示) 输出要求 (固定)</CardTitle>
+            <CardDescription className="text-xs">模型将被指示遵循此输出格式。</CardDescription>
           </CardHeader>
           <CardContent>
             {isLoadingStructure && <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />}
-            {structureError && <p className="text-sm text-destructive">Error: {structureError}</p>}
+            {structureError && <p className="text-sm text-destructive">错误: {structureError}</p>}
             {promptStructure && (
               <pre className="whitespace-pre-wrap font-mono text-sm p-4 rounded-md bg-background/50 overflow-auto max-h-[150px]">
                 {/* Display fetched content */}
@@ -1100,12 +1100,12 @@ export function PromptEditor({ prompt, onSaveSuccess, currentLanguage }: PromptE
         </Card>
         <Card className="bg-secondary/30">
           <CardHeader className="pb-2">
-            <CardTitle className="text-base">(User Prompt) Task Info (Template)</CardTitle>
-            <CardDescription className="text-xs">This structure will be filled with runtime data (source text, TM, etc.).</CardDescription>
+            <CardTitle className="text-base">(用户提示) 任务信息 (模板)</CardTitle>
+            <CardDescription className="text-xs">此结构将用运行时数据（源文本、翻译记忆库等）填充。</CardDescription>
           </CardHeader>
           <CardContent>
             {isLoadingStructure && <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />}
-            {structureError && <p className="text-sm text-destructive">Error: {structureError}</p>}
+            {structureError && <p className="text-sm text-destructive">错误: {structureError}</p>}
             {promptStructure && (
               <pre className="whitespace-pre-wrap font-mono text-sm p-4 rounded-md bg-background/50 overflow-auto max-h-[250px]">
                 {/* Use highlighting helper here as well, substitute language */}

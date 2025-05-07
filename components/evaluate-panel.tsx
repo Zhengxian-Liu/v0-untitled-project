@@ -12,22 +12,22 @@ import { Upload } from "lucide-react"
 const mockPrompts = [
   {
     id: "1",
-    name: "Technical Documentation Translation",
+    name: "技术文档翻译",
     version: "1.2",
   },
   {
     id: "2",
-    name: "Marketing Content Translation",
+    name: "营销内容翻译",
     version: "2.1",
   },
   {
     id: "3",
-    name: "Legal Document Translation",
+    name: "法律文件翻译",
     version: "1.0",
   },
   {
     id: "4",
-    name: "Conversational AI Translation",
+    name: "对话式 AI 翻译",
     version: "1.5",
   },
 ]
@@ -40,10 +40,10 @@ const mockModels = [
 ]
 
 const mockTestSets = [
-  { id: "1", name: "Standard Test Set 1" },
-  { id: "2", name: "Technical Documentation Samples" },
-  { id: "3", name: "Marketing Content Samples" },
-  { id: "4", name: "Legal Document Samples" },
+  { id: "1", name: "标准测试集 1" },
+  { id: "2", name: "技术文档样本" },
+  { id: "3", name: "营销内容样本" },
+  { id: "4", name: "法律文件样本" },
 ]
 
 export function EvaluatePanel({ onRunEvaluation }: { onRunEvaluation?: () => void }) {
@@ -77,8 +77,8 @@ export function EvaluatePanel({ onRunEvaluation }: { onRunEvaluation?: () => voi
       <div className="grid gap-6 md:grid-cols-2">
         <Card>
           <CardHeader>
-            <CardTitle>Step 1: Select Prompts</CardTitle>
-            <CardDescription>Choose one or more prompts to evaluate</CardDescription>
+            <CardTitle>第 1 步：选择提示</CardTitle>
+            <CardDescription>选择一个或多个提示进行评估</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
@@ -103,13 +103,13 @@ export function EvaluatePanel({ onRunEvaluation }: { onRunEvaluation?: () => voi
 
         <Card>
           <CardHeader>
-            <CardTitle>Step 2: Select AI Model</CardTitle>
-            <CardDescription>Choose the AI model to use for evaluation</CardDescription>
+            <CardTitle>第 2 步：选择 AI 模型</CardTitle>
+            <CardDescription>选择用于评估的 AI 模型</CardDescription>
           </CardHeader>
           <CardContent>
             <Select onValueChange={setSelectedModel}>
               <SelectTrigger>
-                <SelectValue placeholder="Select AI model" />
+                <SelectValue placeholder="选择 AI 模型" />
               </SelectTrigger>
               <SelectContent>
                 {mockModels.map((model) => (
@@ -125,21 +125,21 @@ export function EvaluatePanel({ onRunEvaluation }: { onRunEvaluation?: () => voi
 
       <Card>
         <CardHeader>
-          <CardTitle>Step 3: Select Test Set</CardTitle>
-          <CardDescription>Choose or provide text samples for evaluation</CardDescription>
+          <CardTitle>第 3 步：选择测试集</CardTitle>
+          <CardDescription>选择或提供用于评估的文本样本</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
             <div className="flex flex-col space-y-1.5">
-              <Label htmlFor="test-set-type">Test Set Type</Label>
+              <Label htmlFor="test-set-type">测试集类型</Label>
               <Select value={testSetType} onValueChange={setTestSetType}>
                 <SelectTrigger id="test-set-type">
-                  <SelectValue placeholder="Select test set type" />
+                  <SelectValue placeholder="选择测试集类型" />
                 </SelectTrigger>
                 <SelectContent position="popper">
-                  <SelectItem value="standardized">Standardized Test Set</SelectItem>
-                  <SelectItem value="upload">Upload New Set</SelectItem>
-                  <SelectItem value="manual">Manual Input</SelectItem>
+                  <SelectItem value="standardized">标准测试集</SelectItem>
+                  <SelectItem value="upload">上传新测试集</SelectItem>
+                  <SelectItem value="manual">手动输入</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -147,7 +147,7 @@ export function EvaluatePanel({ onRunEvaluation }: { onRunEvaluation?: () => voi
             {testSetType === "standardized" && (
               <Select>
                 <SelectTrigger>
-                  <SelectValue placeholder="Select standardized test set" />
+                  <SelectValue placeholder="选择标准测试集" />
                 </SelectTrigger>
                 <SelectContent>
                   {mockTestSets.map((testSet) => (
@@ -161,7 +161,7 @@ export function EvaluatePanel({ onRunEvaluation }: { onRunEvaluation?: () => voi
 
             {testSetType === "upload" && (
               <div className="grid w-full gap-1.5">
-                <Label htmlFor="file-upload">Upload File</Label>
+                <Label htmlFor="file-upload">上传文件</Label>
                 <div className="flex items-center justify-center w-full">
                   <label
                     htmlFor="file-upload"
@@ -170,9 +170,9 @@ export function EvaluatePanel({ onRunEvaluation }: { onRunEvaluation?: () => voi
                     <div className="flex flex-col items-center justify-center pt-5 pb-6">
                       <Upload className="w-8 h-8 mb-2 text-muted-foreground" />
                       <p className="mb-2 text-sm text-muted-foreground">
-                        <span className="font-semibold">Click to upload</span> or drag and drop
+                        <span className="font-semibold">点击上传</span> 或拖放文件
                       </p>
-                      <p className="text-xs text-muted-foreground">CSV or TXT file (max. 10MB)</p>
+                      <p className="text-xs text-muted-foreground">CSV 或 TXT 文件 (最大 10MB)</p>
                     </div>
                     <input id="file-upload" type="file" className="hidden" />
                   </label>
@@ -182,10 +182,10 @@ export function EvaluatePanel({ onRunEvaluation }: { onRunEvaluation?: () => voi
 
             {testSetType === "manual" && (
               <div className="grid w-full gap-1.5">
-                <Label htmlFor="manual-input">Enter Text Samples</Label>
+                <Label htmlFor="manual-input">输入文本样本</Label>
                 <Textarea
                   id="manual-input"
-                  placeholder="Enter one text sample per line"
+                  placeholder="每行输入一个文本样本"
                   value={manualInput}
                   onChange={(e) => setManualInput(e.target.value)}
                   className="min-h-[150px]"
@@ -198,7 +198,7 @@ export function EvaluatePanel({ onRunEvaluation }: { onRunEvaluation?: () => voi
 
       <div className="flex justify-end">
         <Button onClick={handleRunEvaluation} disabled={selectedPrompts.length === 0 || !selectedModel || isLoading}>
-          {isLoading ? "Running..." : "Run Evaluation"}
+          {isLoading ? "运行中..." : "运行评估"}
         </Button>
       </div>
     </div>

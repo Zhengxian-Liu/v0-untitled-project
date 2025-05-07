@@ -47,7 +47,7 @@ export default function LoginPage() {
             // Assuming response has { access_token: string, token_type: string }
             if (data.access_token) {
                 login(data.access_token); // Call context login function
-                toast.success("Login successful!");
+                toast.success("登录成功！");
                 // Redirect to homepage after successful login
                 router.push('/');
             } else {
@@ -56,7 +56,7 @@ export default function LoginPage() {
 
         } catch (error) {
             console.error("Login failed:", error);
-            toast.error(`Login failed: ${error instanceof Error ? error.message : "Unknown error"}`);
+            toast.error(`登录失败： ${error instanceof Error ? error.message : "未知错误"}`);
         } finally {
             setIsLoading(false);
         }
@@ -66,17 +66,17 @@ export default function LoginPage() {
         <div className="flex items-center justify-center min-h-screen bg-background">
             <Card className="w-full max-w-sm mx-auto">
                 <CardHeader className="space-y-1 text-center">
-                    <CardTitle className="text-2xl font-bold">PromptCraft Login</CardTitle>
-                    <CardDescription>Enter your username and password</CardDescription>
+                    <CardTitle className="text-2xl font-bold">PromptCraft 登录</CardTitle>
+                    <CardDescription>请输入您的用户名和密码</CardDescription>
                 </CardHeader>
                 <CardContent>
                     <form onSubmit={handleLogin} className="space-y-4">
                         <div className="space-y-2">
-                            <Label htmlFor="username">Username</Label>
+                            <Label htmlFor="username">用户名</Label>
                             <Input
                                 id="username"
                                 type="text"
-                                placeholder="your_username"
+                                placeholder="您的用户名"
                                 required
                                 value={username}
                                 onChange={(e) => setUsername(e.target.value)}
@@ -84,7 +84,7 @@ export default function LoginPage() {
                             />
                         </div>
                         <div className="space-y-2">
-                            <Label htmlFor="password">Password</Label>
+                            <Label htmlFor="password">密码</Label>
                             <Input
                                 id="password"
                                 type="password"
@@ -95,13 +95,13 @@ export default function LoginPage() {
                             />
                         </div>
                         <Button type="submit" className="w-full" disabled={isLoading}>
-                            {isLoading ? "Logging in..." : "Login"}
+                            {isLoading ? "登录中..." : "登录"}
                         </Button>
                     </form>
                     <div className="mt-4 text-center text-sm">
-                        Don't have an account?{" "}
+                        还没有账户？{" "}
                         <Link href="/register" className="underline">
-                            Register
+                            注册
                         </Link>
                     </div>
                 </CardContent>

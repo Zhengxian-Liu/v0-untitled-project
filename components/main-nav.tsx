@@ -24,16 +24,16 @@ interface MainNavProps {
 
 // --- Define language list locally for display --- M
 const availableLanguages = [
-  { id: "en", name: "English" },
-  { id: "ja", name: "Japanese" },
-  { id: "ko", name: "Korean" },
-  { id: "zh", name: "Chinese" },
-  { id: "fr", name: "French" },
-  { id: "de", name: "German" },
-  { id: "es", name: "Spanish" },
-  { id: "it", name: "Italian" },
-  { id: "ru", name: "Russian" },
-  { id: "pt", name: "Portuguese" },
+  { id: "en", name: "英语" },
+  { id: "ja", name: "日语" },
+  { id: "ko", name: "韩语" },
+  { id: "zh", name: "中文" },
+  { id: "fr", name: "法语" },
+  { id: "de", name: "德语" },
+  { id: "es", name: "西班牙语" },
+  { id: "it", name: "意大利语" },
+  { id: "ru", name: "俄语" },
+  { id: "pt", name: "葡萄牙语" },
 ];
 // --- End Define ---
 
@@ -53,7 +53,7 @@ export function MainNav({ currentLanguage, user, logout }: MainNavProps) {
           </Link>
           {/* Display Current Language from Context */}
           <span className="text-sm font-medium text-muted-foreground border rounded px-2 py-1">
-             Workspace: {currentLanguage ? (availableLanguages.find(l => l.id === currentLanguage)?.name || currentLanguage) : '...'}
+            工作区: {currentLanguage ? (availableLanguages.find(l => l.id === currentLanguage)?.name || currentLanguage) : '...'}
           </span>
           {/* --- Remove Language Selector --- M */}
           {/* <Select ... > ... </Select> */}
@@ -66,15 +66,15 @@ export function MainNav({ currentLanguage, user, logout }: MainNavProps) {
               <Button variant="ghost" className="relative h-8 w-8 rounded-full">
                 <Avatar className="h-8 w-8">
                   {/* Use initials or placeholder */}
-                  <AvatarFallback>{user?.username?.substring(0, 2).toUpperCase() || '??'}</AvatarFallback>
+                  <AvatarFallback>{user?.username?.substring(0, 2).toUpperCase() || '用户'}</AvatarFallback>
                 </Avatar>
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent className="w-56" align="end" forceMount>
               <DropdownMenuLabel className="font-normal">
                 <div className="flex flex-col space-y-1">
-                  <p className="text-sm font-medium leading-none">{user?.username || 'User'}</p>
-                  <p className="text-xs leading-none text-muted-foreground">Lang: {currentLanguage || 'N/A'}</p>
+                  <p className="text-sm font-medium leading-none">{user?.username || '用户'}</p>
+                  <p className="text-xs leading-none text-muted-foreground">语言: {currentLanguage || '不适用'}</p>
                 </div>
               </DropdownMenuLabel>
               <DropdownMenuSeparator />
@@ -82,7 +82,7 @@ export function MainNav({ currentLanguage, user, logout }: MainNavProps) {
               {/* <DropdownMenuItem>Profile</DropdownMenuItem> */}
               {/* <DropdownMenuItem>Settings</DropdownMenuItem> */}
               {/* <DropdownMenuSeparator /> */}
-              <DropdownMenuItem onClick={logout}>Log out</DropdownMenuItem>
+              <DropdownMenuItem onClick={logout}>登出</DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
         </div>

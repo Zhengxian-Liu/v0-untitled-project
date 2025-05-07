@@ -26,10 +26,10 @@ const mockModels = [
 
 // Mock data for test sets
 const mockTestSets = [
-  { id: "1", name: "Standard Test Set 1" },
-  { id: "2", name: "Technical Documentation Samples" },
-  { id: "3", name: "Marketing Content Samples" },
-  { id: "4", name: "Game Dialogue Samples" },
+  { id: "1", name: "标准测试集 1" },
+  { id: "2", name: "技术文档样本" },
+  { id: "3", name: "营销内容样本" },
+  { id: "4", name: "游戏对话样本" },
 ]
 
 // --- Update EvaluationColumn Type --- M
@@ -172,7 +172,7 @@ export function EvaluationPanel({ currentLanguage }: EvaluationPanelProps) {
 
       } catch (err) {
         console.error("Failed to fetch prompts for evaluation panel:", err);
-        setPromptsError(err instanceof Error ? err.message : "An unknown error occurred");
+        setPromptsError(err instanceof Error ? err.message : "发生未知错误");
       } finally {
         setIsLoadingPrompts(false);
       }
@@ -197,9 +197,9 @@ export function EvaluationPanel({ currentLanguage }: EvaluationPanelProps) {
         setColumns(prev => prev.map(col => col.id === columnId ? { ...col, availableVersions: versionsData, isLoadingVersions: false } : col));
     } catch (err) {
         console.error(`Error fetching versions for column ${columnId}:`, err);
-        const errorMsg = err instanceof Error ? err.message : "Unknown error";
+        const errorMsg = err instanceof Error ? err.message : "未知错误";
         setColumns(prev => prev.map(col => col.id === columnId ? { ...col, versionsError: errorMsg, isLoadingVersions: false, availableVersions: [] } : col));
-        toast.error(`Failed to load versions: ${errorMsg}`);
+        toast.error(`加载版本失败： ${errorMsg}`);
     }
   };
   // --- End Fetch Versions ---
@@ -310,7 +310,7 @@ export function EvaluationPanel({ currentLanguage }: EvaluationPanelProps) {
 
   // Get prompt name and version by ID
   const getPromptInfo = (versionId: string | null) => {
-      if (!versionId) return "Select Prompt Version";
+      if (!versionId) return "选择提示版本";
       // Need to find the specific version across all columns' availableVersions
       for (const col of columns) {
           const prompt = col.availableVersions?.find(p => p.id === versionId);
@@ -320,12 +320,12 @@ export function EvaluationPanel({ currentLanguage }: EvaluationPanelProps) {
       }
       // Fallback if version not found in currently loaded lists (e.g., initial state)
       const latestPrompt = availablePrompts.find(p => p.id === versionId);
-      return latestPrompt ? `${latestPrompt.name} (v${latestPrompt.version || '?.?'})` : "Loading...";
+      return latestPrompt ? `${latestPrompt.name} (v${latestPrompt.version || '?.?'})` : "加载中...";
   };
 
   // Get prompt text by ID
   const getPromptText = (versionId: string | null) => {
-       if (!versionId) return "No version selected";
+       if (!versionId) return "未选择版本";
        for (const col of columns) {
           const prompt = col.availableVersions?.find(p => p.id === versionId);
           if (prompt?.sections && prompt.sections.length > 0) {
@@ -338,13 +338,13 @@ export function EvaluationPanel({ currentLanguage }: EvaluationPanelProps) {
        if (latestPrompt?.sections && latestPrompt.sections.length > 0) {
            return latestPrompt.sections.map(sec => `### ${sec.name}\n${sec.content}`).join('\n\n');
        }
-       return latestPrompt?.text || "Prompt text not available";
+       return latestPrompt?.text || "提示文本不可用";
   };
 
   // Get model name by ID
   const getModelName = (modelId: string) => {
     const model = mockModels.find((m) => m.id === modelId)
-    return model ? model.name : "Unknown Model"
+    return model ? model.name : "未知模型"
   }
 
   // Function to clear any active polling
@@ -374,7 +374,7 @@ export function EvaluationPanel({ currentLanguage }: EvaluationPanelProps) {
 
     } catch (error) {
         console.error("Failed fetching full results:", error);
-        toast.error(`Failed to load full results: ${error instanceof Error ? error.message : "Unknown error"}`);
+        toast.error(`加载完整结果失败： ${error instanceof Error ? error.message : "未知错误"}`);
         // setIsLoadingResults(false);
     }
   };
@@ -422,7 +422,7 @@ export function EvaluationPanel({ currentLanguage }: EvaluationPanelProps) {
               if (!isCompletionToastShown) {
                   setIsCompletionToastShown(true); // Set flag immediately
                   const combinedStatus = `Eval: ${newEvalStatus ?? '-'} / Judge: ${newJudgeStatus ?? '-'}`;
-                  toast.info(`Evaluation ${evalId} finished. Status: ${combinedStatus}`);
+                  toast.info(`评估 ${evalId} 已完成。状态： ${combinedStatus}`);
                   console.log(`Polling stopped by pollStatus (toast shown). Final Status: ${combinedStatus}`);
                   shouldFetchFullResults = true; // Ensure final results are fetched
               } else {
@@ -442,7 +442,7 @@ export function EvaluationPanel({ currentLanguage }: EvaluationPanelProps) {
 
       } catch (error) {
           console.error("Failed during status poll:", error);
-          toast.error(`Status poll failed: ${error instanceof Error ? error.message : "Unknown error"}`);
+          toast.error(`状态轮询失败： ${error instanceof Error ? error.message : "未知错误"}`);
           // Consider stopping polling on error?
           // clearPolling();
       }
@@ -494,7 +494,7 @@ export function EvaluationPanel({ currentLanguage }: EvaluationPanelProps) {
 
     const promptIds = columns.map(col => col.selectedVersionId).filter(id => !!id);
     if (promptIds.length === 0) {
-      toast.error("Please select at least one prompt in the columns.");
+      toast.error("请在列中至少选择一个提示。");
       setIsLoading(false);
       return;
     }
@@ -507,7 +507,7 @@ export function EvaluationPanel({ currentLanguage }: EvaluationPanelProps) {
     testSetData = testSetData.filter(item => item.source_text.trim() !== "");
 
     if (testSetData.length === 0) {
-        toast.error("Please provide test set data (Manual Input).");
+        toast.error("请提供测试集数据（手动输入）。");
         setIsLoading(false);
         return;
     }
@@ -529,7 +529,7 @@ export function EvaluationPanel({ currentLanguage }: EvaluationPanelProps) {
         console.log("Evaluation started:", evaluationData);
         setCurrentEvaluationId(evaluationData.id);
         setEvaluationStatus(evaluationData.status);
-        toast.success(`Evaluation ${evaluationData.id} started successfully!`);
+        toast.success(`评估 ${evaluationData.id} 已成功开始！`);
         // --- End Use ---
 
         // --- ADDED: Populate pendingOutputs --- M
@@ -552,7 +552,7 @@ export function EvaluationPanel({ currentLanguage }: EvaluationPanelProps) {
 
     } catch (error) {
         console.error("Failed to start evaluation:", error);
-        toast.error(`Failed to start evaluation: ${error instanceof Error ? error.message : "Unknown error"}`);
+        toast.error(`启动评估失败： ${error instanceof Error ? error.message : "未知错误"}`);
         setEvaluationStatus("failed");
     } finally {
         setIsLoading(false);
@@ -567,7 +567,7 @@ export function EvaluationPanel({ currentLanguage }: EvaluationPanelProps) {
   const handleDeleteTestRow = (id: string) => {
       // Prevent deleting the last row? Optional.
       if (testRows.length <= 1) {
-          toast.info("Cannot delete the last test row.");
+          toast.info("无法删除最后一个测试行。");
           return;
       }
       setTestRows(testRows.filter(row => row.id !== id));
@@ -585,11 +585,11 @@ export function EvaluationPanel({ currentLanguage }: EvaluationPanelProps) {
   // --- Handler to Save Evaluation Session --- M
   const handleSaveEvaluation = async () => {
     if (!currentEvaluationId) {
-      toast.error("Please run an evaluation before saving.");
+      toast.error("请在保存前运行评估。");
       return;
     }
     if (evaluationResults.length === 0) {
-        toast.error("No results available to save for the current evaluation.");
+        toast.error("当前评估没有可保存的结果。");
         return;
     }
 
@@ -629,7 +629,7 @@ export function EvaluationPanel({ currentLanguage }: EvaluationPanelProps) {
 
     console.log("Attempting to save evaluation session:", sessionData);
     // TODO: Replace with actual saving state indicator
-    toast.info("Saving evaluation session...");
+    toast.info("正在保存评估会话...");
 
     // 2. Call Backend
     try {
@@ -642,11 +642,11 @@ export function EvaluationPanel({ currentLanguage }: EvaluationPanelProps) {
       });
 
       console.log("Evaluation session saved:", savedSession);
-      toast.success(`Evaluation session saved successfully (ID: ${savedSession.id})`);
+      toast.success(`评估会话已成功保存 (ID: ${savedSession.id})`);
 
     } catch (error) {
       console.error("Failed to save evaluation session:", error);
-      toast.error(`Save failed: ${error instanceof Error ? error.message : "Unknown error"}`);
+      toast.error(`保存失败： ${error instanceof Error ? error.message : "未知错误"}`);
     }
   };
   // --- End Save Handler ---
@@ -654,18 +654,18 @@ export function EvaluationPanel({ currentLanguage }: EvaluationPanelProps) {
   // --- Handler to Trigger LLM Judging --- M
   const handleRunLLMJudge = async () => {
     if (!currentEvaluationId) {
-        toast.error("No active evaluation run selected");
+        toast.error("未选择活动的评估运行");
         return;
     }
 
     // Check if already running/completed (optional)
     if (judgeStatus && judgeStatus !== 'failed' && judgeStatus !== 'not_started') {
-        toast.info(`LLM judging is already ${judgeStatus} for this evaluation.`);
+        toast.info(`此评估的 LLM 评审状态已为 ${judgeStatus}。`);
         return;
     }
 
     console.log(`Triggering LLM judge for evaluation: ${currentEvaluationId}`);
-    toast.info("Initiating LLM judge process...");
+    toast.info("正在启动 LLM 评审流程...");
     setJudgeStatus('pending'); // Optimistic UI update
 
     try {
@@ -673,11 +673,11 @@ export function EvaluationPanel({ currentLanguage }: EvaluationPanelProps) {
             method: 'POST'
         });
         // No need to parse response body if using 202 Accepted
-        toast.success("LLM judging process started successfully.");
+        toast.success("LLM 评审流程已成功启动。");
         // Polling should automatically pick up the status change
     } catch (error) {
         console.error("Failed to start LLM judging:", error);
-        toast.error(`Failed to start LLM judging: ${error instanceof Error ? error.message : "Unknown error"}`);
+        toast.error(`启动 LLM 评审失败： ${error instanceof Error ? error.message : "未知错误"}`);
         setJudgeStatus('failed'); // Revert optimistic update
     }
   };
@@ -691,7 +691,7 @@ export function EvaluationPanel({ currentLanguage }: EvaluationPanelProps) {
           {/* Project Selector */}
           <Select value={selectedProject} onValueChange={setSelectedProject}>
             <SelectTrigger className="w-[200px]">
-              <SelectValue placeholder="Select project" />
+              <SelectValue placeholder="选择项目" />
             </SelectTrigger>
             <SelectContent>
               {projects.map((project) => (
@@ -710,7 +710,7 @@ export function EvaluationPanel({ currentLanguage }: EvaluationPanelProps) {
               onCheckedChange={(checked) => setShowIdealOutputs(!!checked)}
             />
             <Label htmlFor="show-ideal" className="text-sm whitespace-nowrap">
-              Show Reference Translations
+              显示参考译文
             </Label>
           </div>
 
@@ -722,7 +722,7 @@ export function EvaluationPanel({ currentLanguage }: EvaluationPanelProps) {
               onCheckedChange={(checked) => setShowSentPrompts(!!checked)}
             />
             <Label htmlFor="show-sent-prompts" className="text-sm whitespace-nowrap">
-              Show Sent Prompts
+              显示已发送提示
             </Label>
           </div>
 
@@ -734,19 +734,19 @@ export function EvaluationPanel({ currentLanguage }: EvaluationPanelProps) {
             <PopoverTrigger asChild>
               <Button variant="outline">
                 <Settings className="mr-2 h-4 w-4" />
-                Test Settings
+                测试设置
               </Button>
             </PopoverTrigger>
             <PopoverContent className="w-80">
               {/* Add the content for Test Settings Popover here if needed */}
-              <p>Test set options will go here...</p>
+              <p>测试集选项将显示在此处...</p>
             </PopoverContent>
           </Popover>
 
           {/* Run Evaluation Button */}
           <Button onClick={handleRunEvaluation} disabled={isLoading || !!pollingIntervalId}>
             <Play className="mr-2 h-4 w-4" />
-            {evaluationStatus === 'pending' || evaluationStatus === 'running' ? "Running..." : "Run Evaluation"}
+            {evaluationStatus === 'pending' || evaluationStatus === 'running' ? "运行中..." : "运行评估"}
           </Button>
 
           {/* Run LLM Judge Button */}
@@ -754,16 +754,16 @@ export function EvaluationPanel({ currentLanguage }: EvaluationPanelProps) {
              variant="outline"
              onClick={handleRunLLMJudge}
              disabled={!currentEvaluationId || evaluationStatus === 'pending' || evaluationStatus === 'running' || (!!judgeStatus && judgeStatus !== 'failed' && judgeStatus !== 'not_started')}
-             title={!currentEvaluationId ? "Run an evaluation first" : (judgeStatus && judgeStatus !== 'failed' && judgeStatus !== 'not_started') ? `Judging status: ${judgeStatus}` : "Run LLM Judge Evaluation"}
+             title={!currentEvaluationId ? "请先运行评估" : (judgeStatus && judgeStatus !== 'failed' && judgeStatus !== 'not_started') ? `评审状态：${judgeStatus}` : "运行 LLM 评审评估"}
           >
             {/* Consider adding an icon e.g., <Sparkles className="mr-2 h-4 w-4" /> */}
-             {judgeStatus === 'pending' ? 'Judging...' : 'Run LLM Judge'}
+             {judgeStatus === 'pending' ? '评审中...' : '运行 LLM 评审'}
           </Button>
 
           {/* Status Display */}
           {(evaluationStatus || judgeStatus) && (
              <span className="text-sm text-muted-foreground ml-2">
-               Eval: {evaluationStatus ?? '-'} / Judge: {judgeStatus ?? '-'}
+               评估：{evaluationStatus ?? '-'} / 评审：{judgeStatus ?? '-'}
              </span>
            )}
         </div>
@@ -772,18 +772,18 @@ export function EvaluationPanel({ currentLanguage }: EvaluationPanelProps) {
       {/* Results Card and Table */}
       <Card>
         <CardHeader>
-          <CardTitle>Evaluation Results</CardTitle>
-          <CardDescription>Compare translations from different prompts</CardDescription>
+          <CardTitle>评估结果</CardTitle>
+          <CardDescription>比较不同提示的翻译</CardDescription>
         </CardHeader>
         <CardContent className="p-0 overflow-auto">
           <Table>
             <TableHeader>
               <TableRow>
                 {/* Test Set Columns */}
-                <TableHead className="w-[40%] min-w-[200px]">Source Text</TableHead>
-                {showIdealOutputs && <TableHead className="w-[40%] min-w-[200px]">Reference Translation</TableHead>}
+                <TableHead className="w-[40%] min-w-[200px]">源文本</TableHead>
+                {showIdealOutputs && <TableHead className="w-[40%] min-w-[200px]">参考译文</TableHead>}
                 {/* ADDED: Additional Instructions Column Header */}
-                <TableHead className="w-[20%] min-w-[150px]">Additional Instructions</TableHead>
+                <TableHead className="w-[20%] min-w-[150px]">附加说明</TableHead>
 
                 {/* Prompt/Model Columns */}
                 {columns.map((column) => (
@@ -797,12 +797,12 @@ export function EvaluationPanel({ currentLanguage }: EvaluationPanelProps) {
                           disabled={isLoadingPrompts}
                         >
                           <SelectTrigger className="h-8 w-full mb-1">
-                            <SelectValue placeholder="Select Base Prompt" />
+                            <SelectValue placeholder="选择基础提示" />
                           </SelectTrigger>
                           <SelectContent>
-                            {isLoadingPrompts && <SelectItem value="loading" disabled>Loading...</SelectItem>}
-                            {promptsError && <SelectItem value="error" disabled>Error loading</SelectItem>}
-                            <SelectItem value={SELECT_PLACEHOLDER_VALUE}>-- Select Base Prompt --</SelectItem>
+                            {isLoadingPrompts && <SelectItem value="loading" disabled>加载中...</SelectItem>}
+                            {promptsError && <SelectItem value="error" disabled>加载错误</SelectItem>}
+                            <SelectItem value={SELECT_PLACEHOLDER_VALUE}>-- 选择基础提示 --</SelectItem>
                             {!isLoadingPrompts && !promptsError && availablePrompts.map((prompt) => (
                               // Use base_prompt_id as value, display name
                               <SelectItem key={prompt.base_prompt_id} value={prompt.base_prompt_id}>
@@ -821,17 +821,17 @@ export function EvaluationPanel({ currentLanguage }: EvaluationPanelProps) {
                             disabled={!column.basePromptId || column.isLoadingVersions}
                         >
                             <SelectTrigger className="h-8 w-[calc(100%-70px)]"> {/* Adjusted width */}
-                                <SelectValue placeholder="Select Version" />
+                                <SelectValue placeholder="选择版本" />
                             </SelectTrigger>
                             <SelectContent>
-                                {column.isLoadingVersions && <SelectItem value="loading" disabled>Loading...</SelectItem>}
+                                {column.isLoadingVersions && <SelectItem value="loading" disabled>加载中...</SelectItem>}
                                 {column.versionsError && <SelectItem value="error" disabled>{column.versionsError}</SelectItem>}
-                                <SelectItem value={SELECT_PLACEHOLDER_VALUE}>-- Select Version --</SelectItem>
+                                <SelectItem value={SELECT_PLACEHOLDER_VALUE}>-- 选择版本 --</SelectItem>
                                 {column.availableVersions?.map((version) => (
                                     <SelectItem key={version.id} value={version.id}>
-                                        Version {version.version}
-                                        {version.is_latest ? " (Latest)" : ""}
-                                        {version.isProduction ? " (Prod)" : ""}
+                                        版本 {version.version}
+                                        {version.is_latest ? " (最新)" : ""}
+                                        {version.isProduction ? " (生产)" : ""}
                                     </SelectItem>
                                 ))}
                             </SelectContent>
@@ -843,16 +843,16 @@ export function EvaluationPanel({ currentLanguage }: EvaluationPanelProps) {
                                 size="icon"
                                 onClick={() => handleTogglePrompt(column.id)}
                                 className="h-8 w-8"
-                                title={column.showPrompt ? "Hide Prompt" : "Show Prompt"}
-                              >
-                                {column.showPrompt ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                onClick={() => handleRemoveColumn(column.id)}
-                                className="h-8 w-8 text-destructive"
-                                title="Remove Column"
+                                title={column.showPrompt ? "隐藏提示" : "显示提示"}
+                             >
+                               {column.showPrompt ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                             </Button>
+                             <Button
+                               variant="ghost"
+                               size="icon"
+                               onClick={() => handleRemoveColumn(column.id)}
+                               className="h-8 w-8 text-destructive"
+                               title="移除列"
                                 disabled={columns.length <= 1} // Prevent removing last column
                               >
                                 <Trash2 className="h-4 w-4" />
@@ -878,7 +878,7 @@ export function EvaluationPanel({ currentLanguage }: EvaluationPanelProps) {
                 {/* Add Column Button Header */}
                 <TableHead className="w-[100px]">
                   <Button variant="ghost" size="sm" onClick={handleAddColumn} className="h-8">
-                    <Plus className="h-4 w-4 mr-1" /> Col
+                    <Plus className="h-4 w-4 mr-1" /> 列
                   </Button>
                 </TableHead>
               </TableRow>
@@ -889,7 +889,7 @@ export function EvaluationPanel({ currentLanguage }: EvaluationPanelProps) {
                   {/* Source Text Cell */}
                   <TableCell className="align-top p-1">
                     <Textarea
-                      placeholder={`Source ${index + 1}`}
+                      placeholder={`源文本 ${index + 1}`}
                       value={row.sourceText}
                       onChange={(e) => handleTestRowChange(row.id, 'sourceText', e.target.value)}
                       className="min-h-[80px] h-auto resize-y border-none focus-visible:ring-1 focus-visible:ring-ring p-1"
@@ -900,7 +900,7 @@ export function EvaluationPanel({ currentLanguage }: EvaluationPanelProps) {
                   {showIdealOutputs && (
                     <TableCell className="align-top p-1">
                        <Textarea
-                         placeholder={`Reference ${index + 1}`}
+                         placeholder={`参考 ${index + 1}`}
                          value={row.referenceText}
                          onChange={(e) => handleTestRowChange(row.id, 'referenceText', e.target.value)}
                          className="min-h-[80px] h-auto resize-y border-none focus-visible:ring-1 focus-visible:ring-ring p-1"
@@ -911,7 +911,7 @@ export function EvaluationPanel({ currentLanguage }: EvaluationPanelProps) {
                   {/* Additional Instructions Input Cell */}
                   <TableCell className="align-top p-1">
                      <Textarea
-                       placeholder={`Instructions ${index + 1}`}
+                       placeholder={`说明 ${index + 1}`}
                        value={row.additional_instructions}
                        onChange={(e) => handleTestRowChange(row.id, 'additional_instructions', e.target.value)}
                        className="min-h-[80px] h-auto resize-y border-none focus-visible:ring-1 focus-visible:ring-ring p-1 text-xs" // Smaller text?
@@ -938,30 +938,30 @@ export function EvaluationPanel({ currentLanguage }: EvaluationPanelProps) {
                         {(() => { console.log(`[Render] Row: ${row.id}, Col: ${column.id}, Output Data:`, output); return null; })()}
                         {isGenPending ? (
                           <div className="flex items-center justify-center text-muted-foreground text-sm">
-                            <Loader2 className="h-4 w-4 animate-spin mr-1" /> Generating...
+                            <Loader2 className="h-4 w-4 animate-spin mr-1" /> 生成中...
                           </div>
                         ) : output ? (
                            <div className="space-y-2">
                               {/* --- ADDED: Sent Prompt Display (Conditional) --- */}
                               {showSentPrompts && (
                                   <ScrollArea className="h-[100px] w-full rounded-md border bg-blue-500/10 p-2 mb-2">
-                                     <p className="text-xs font-medium text-muted-foreground mb-1">Sent Prompt (Tokens: {output.prompt_token_count ?? 'N/A'}):</p>
+                                     <p className="text-xs font-medium text-muted-foreground mb-1">已发送提示 (Token数: {output.prompt_token_count ?? 'N/A'}):</p>
                                      <pre className="text-xs font-mono whitespace-pre-wrap">
                                          {/* Show System Prompt */}
                                          {output.sent_system_prompt ? (
-                                             `--- SYSTEM PROMPT ---\n${output.sent_system_prompt}`
+                                             `--- 系统提示 ---\n${output.sent_system_prompt}`
                                          ) : (
-                                             "(System prompt not stored)"
+                                             "(系统提示未存储)"
                                          )}
                                          {
                                          /* Add separator if both exist */
-                                         output.sent_system_prompt && output.sent_user_prompt ? `\n\n--- USER PROMPT ---\n` : ''
+                                         output.sent_system_prompt && output.sent_user_prompt ? `\n\n--- 用户提示 ---\n` : ''
                                          }
                                          {/* Show User Prompt */}
                                          {output.sent_user_prompt ? (
-                                             output.sent_system_prompt ? output.sent_user_prompt : `--- USER PROMPT ---\n${output.sent_user_prompt}`
+                                             output.sent_system_prompt ? output.sent_user_prompt : `--- 用户提示 ---\n${output.sent_user_prompt}`
                                          ) : (
-                                             output.sent_system_prompt ? '' : "(User prompt not stored)"
+                                             output.sent_system_prompt ? '' : "(用户提示未存储)"
                                          )}
                                      </pre>
                                   </ScrollArea>
@@ -969,19 +969,19 @@ export function EvaluationPanel({ currentLanguage }: EvaluationPanelProps) {
                               {/* --- END: Sent Prompt Display --- */}
 
                               {/* Model Output */}
-                              <p>{output.model_output || "(No output)"}</p>
+                              <p>{output.model_output || "(无输出)"}</p>
 
                               {/* LLM Judge Section (only if not pending judging) */}
                               {!isJudgingPending && (output.llm_judge_score !== undefined && output.llm_judge_score !== null || output.llm_judge_error) && (
                                 <div className="mt-2 pt-2 border-t border-dashed">
-                                  <p className="text-xs font-medium text-muted-foreground">LLM Judge:</p>
+                                  <p className="text-xs font-medium text-muted-foreground">LLM 评审：</p>
                                   {output.llm_judge_error ? (
-                                      <p className="text-xs text-destructive">Error: {output.llm_judge_error}</p>
+                                      <p className="text-xs text-destructive">错误：{output.llm_judge_error}</p>
                                   ) : (
                                       <>
-                                          <p className="text-sm font-semibold">Score: {output.llm_judge_score?.toFixed(1) ?? '-'}</p>
+                                          <p className="text-sm font-semibold">分数：{output.llm_judge_score?.toFixed(1) ?? '-'}</p>
                                           {output.llm_judge_rationale && (
-                                              <p className="text-xs text-muted-foreground mt-1"><span className="font-medium">Rationale:</span> {output.llm_judge_rationale}</p>
+                                              <p className="text-xs text-muted-foreground mt-1"><span className="font-medium">理由：</span> {output.llm_judge_rationale}</p>
                                           )}
                                       </>
                                   )}
@@ -989,7 +989,7 @@ export function EvaluationPanel({ currentLanguage }: EvaluationPanelProps) {
                               )}
                               {isJudgingPending && (
                                  <div className="mt-2 pt-2 border-t border-dashed flex items-center justify-center text-muted-foreground text-sm">
-                                    <Loader2 className="h-4 w-4 animate-spin mr-1" /> Judging...
+                                    <Loader2 className="h-4 w-4 animate-spin mr-1" /> 评审中...
                                  </div>
                               )}
 
@@ -1012,7 +1012,7 @@ export function EvaluationPanel({ currentLanguage }: EvaluationPanelProps) {
                                 </div>
                                 {/* Comment Input */}
                                 <Textarea
-                                  placeholder="Add comment..."
+                                  placeholder="添加评论..."
                                   value={output.comment || ""}
                                   onChange={(e) => resultId && handleCommentChange(resultId, column.id, e.target.value)}
                                   className="text-xs border rounded-md p-1 min-h-[50px] resize-y focus-visible:ring-1"
@@ -1037,7 +1037,7 @@ export function EvaluationPanel({ currentLanguage }: EvaluationPanelProps) {
                         onClick={() => handleDeleteTestRow(row.id)}
                         disabled={testRows.length <= 1} // Disable delete for last row
                         className="h-8 w-8 text-muted-foreground hover:text-destructive"
-                        title="Delete row"
+                        title="删除行"
                         >
                         <Trash2 className="h-4 w-4" />
                     </Button>
@@ -1048,7 +1048,7 @@ export function EvaluationPanel({ currentLanguage }: EvaluationPanelProps) {
               {testRows.length > 0 && evaluationResults.length === 0 && !isLoadingResults && !(evaluationStatus === 'pending' || evaluationStatus === 'running') && (
                     <TableRow>
                         <TableCell colSpan={columns.length + (showIdealOutputs ? 2 : 1) + 1} className="text-center text-muted-foreground py-4">
-                            No results generated for this evaluation run yet.
+                            此评估运行尚未生成结果。
                         </TableCell>
                     </TableRow>
               )}
@@ -1057,7 +1057,7 @@ export function EvaluationPanel({ currentLanguage }: EvaluationPanelProps) {
                     <TableRow>
                         {/* Adjust colspan for new column */}
                         <TableCell colSpan={columns.length + (showIdealOutputs ? 3 : 2) + 1} className="text-center text-muted-foreground py-4">
-                            Add test rows below to start an evaluation.
+                            在下方添加测试行以开始评估。
                         </TableCell>
                     </TableRow>
                 )}
@@ -1070,14 +1070,14 @@ export function EvaluationPanel({ currentLanguage }: EvaluationPanelProps) {
       <div className="flex justify-end gap-2">
         <Button variant="outline" onClick={handleAddTestRow}>
           <Plus className="mr-2 h-4 w-4" />
-          Add Test Row
+          添加测试行
         </Button>
         <Button variant="outline">
           <Download className="mr-2 h-4 w-4" />
-          Export Results
+          导出结果
         </Button>
         <Button onClick={handleSaveEvaluation} disabled={!currentEvaluationId || isLoading || !!pollingIntervalId || judgeStatus === 'pending'}>
-            Save Evaluation
+            保存评估
         </Button>
       </div>
     </div>

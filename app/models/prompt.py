@@ -111,4 +111,6 @@ class PromptInDBBase(PromptBase):
 
 class Prompt(PromptInDBBase):
     """Properties to return to client via API for a specific prompt version."""
+    # Add the dynamically calculated latest score (optional)
+    latest_score: Optional[float] = Field(None, description="The latest evaluation score for this specific prompt version (calculated on retrieval).")
     pass 

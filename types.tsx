@@ -15,6 +15,7 @@ export type Prompt = {
   base_prompt_id: string // ID linking all versions of a prompt
   is_latest: boolean // Is this the latest version?
   // --- End Versioning Fields ---
+  latest_score?: number | null; // Dynamically added: latest score for this version
 }
 
 export type PromptSection = {

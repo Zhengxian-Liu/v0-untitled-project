@@ -228,3 +228,12 @@ export interface TestSetEntryBase {
   extra_info_value?: string | null;
 }
 // --- End Test Set Entry ---
+
+// NEW: Type for Base Prompt Summary from backend
+export type BasePromptSummary = {
+  base_prompt_id: string; // The common identifier for all versions
+  name: string; // Name (typically from latest version)
+  language: string; // Language code
+  project?: string | null; // Project identifier
+  latest_updated_at: string; // ISO datetime string of the latest update in the group
+};

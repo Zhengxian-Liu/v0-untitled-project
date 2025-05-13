@@ -9,7 +9,7 @@ from bson import ObjectId
 from datetime import datetime
 
 from app.models.common import PyObjectId
-from app.models.prompt import Prompt, PromptCreate, PromptUpdate, PromptSection
+from app.models.prompt import Prompt, PromptCreate, PromptUpdate, PromptSection, BasePromptSummary
 from app.db.client import get_database
 from app.routes.auth import get_current_active_user
 from app.models.user import User as UserModel
@@ -523,3 +523,66 @@ async def get_prompt_versions(
     logger.info(f"---> get_prompt_versions: Finished validation. Returning {len(validated_versions_with_scores)} validated versions with scores.")
     return validated_versions_with_scores
 # --- End NEW Endpoint --- 
+
+# --- NEW: Endpoint to get base prompt summaries --- M
+@router.get(
+    "/base-summaries/",
+    response_model=List[BasePromptSummary],
+    summary="Retrieve summaries of all base prompts",
+    description="Gets a list of summaries for each unique base_prompt_id, representing a conceptual prompt and its versions.",
+)
+async def read_base_prompt_summaries(
+    db: AsyncIOMotorDatabase = Depends(get_database),
+    current_user: UserModel = Depends(get_current_active_user)
+):
+    """Retrieve summaries for all base prompts accessible by the user (based on language)."""
+    pipeline = [
+        {
+            "$match": {
+                "language": current_user.language,
+                "is_deleted": {"$ne": True}
+            }
+        },
+        {
+            "$sort": {"updated_at": -1} # Sort by updated_at to get the latest version's info first within a group
+        },
+        {
+            "$group": {
+                "_id": "$base_prompt_id", # Group by the base_prompt_id
+                "name": {"$first": "$name"}, # Take the name from the most recently updated version
+                "language": {"$first": "$language"}, # Language should be consistent within a base_prompt group
+                "project": {"$first": "$project"}, # Take project from the most recently updated version
+                "latest_updated_at": {"$first": "$updated_at"} # This will be the latest update time for the group
+            }
+        },
+        {
+            "$project": { # Reshape to match BasePromptSummary model
+                "base_prompt_id": "$_id",
+                "name": 1,
+                "language": 1,
+                "project": 1,
+                "latest_updated_at": 1
+            }
+        },
+        {
+            "$sort": {"latest_updated_at": -1} # Optionally sort the final list of base prompts
+        }
+    ]
+
+    summaries_raw = await db[PROMPT_COLLECTION].aggregate(pipeline).to_list(length=None)
+    logger.info(f"---> read_base_prompt_summaries: Found {len(summaries_raw)} raw base prompt summaries.")
+
+    validated_summaries = []
+    for raw_summary in summaries_raw:
+        try:
+            # The _id from grouping is the base_prompt_id
+            if raw_summary.get('base_prompt_id') is None:
+                logger.warning(f"Skipping summary due to missing base_prompt_id: {raw_summary}")
+                continue
+            validated_summaries.append(BasePromptSummary.model_validate(raw_summary))
+        except Exception as e:
+            logger.error(f"Failed to validate base prompt summary: {raw_summary}, Error: {e}")
+    
+    logger.info(f"---> read_base_prompt_summaries: Returning {len(validated_summaries)} validated summaries.")
+    return validated_summaries
+# --- End NEW Endpoint --- M 

@@ -113,4 +113,23 @@ class Prompt(PromptInDBBase):
     """Properties to return to client via API for a specific prompt version."""
     # Add the dynamically calculated latest score (optional)
     latest_score: Optional[float] = Field(None, description="The latest evaluation score for this specific prompt version (calculated on retrieval).")
-    pass 
+    pass
+
+# --- NEW: Model for Base Prompt Summary --- M
+class BasePromptSummary(BaseModel):
+    """Summary information for a group of prompt versions, identified by base_prompt_id."""
+    base_prompt_id: PyObjectId = Field(..., description="The common identifier for all versions of this prompt.")
+    name: str = Field(..., description="The name of the prompt (typically from the latest version)." )
+    language: str = Field(..., description="Associated language identifier.")
+    project: Optional[str] = Field(None, description="Associated project identifier (if available).")
+    latest_updated_at: datetime = Field(..., description="Timestamp of the most recent update among all versions.")
+
+    model_config = ConfigDict(
+        arbitrary_types_allowed=True,
+        json_encoders={
+            ObjectId: str,
+            PyObjectId: str,
+            datetime: lambda dt: dt.isoformat() # Ensure datetime is serialized correctly
+        },
+    )
+# --- End NEW Model --- 

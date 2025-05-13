@@ -158,6 +158,7 @@ export function PromptLibrary({ onPromptSelect, currentLanguage }: PromptLibrary
                 <TableHead>标签</TableHead>
                 <TableHead>项目</TableHead>
                 <TableHead>版本</TableHead>
+                <TableHead>得分</TableHead>
                 <TableHead>生产</TableHead>
                 <TableHead>最后修改时间</TableHead>
                 <TableHead>操作</TableHead>
@@ -192,6 +193,11 @@ export function PromptLibrary({ onPromptSelect, currentLanguage }: PromptLibrary
                         )}
                       </TableCell>
                       <TableCell>{prompt.version ? `v${prompt.version}` : "不适用"}</TableCell>
+                      <TableCell>
+                        {prompt.latest_score !== null && prompt.latest_score !== undefined 
+                          ? prompt.latest_score.toFixed(1) 
+                          : "N/A"}
+                      </TableCell>
                       <TableCell>{prompt.isProduction && <CheckCircle2 className="h-5 w-5 text-green-500" />}</TableCell>
                       <TableCell>{prompt.updated_at ? new Date(prompt.updated_at).toLocaleString() : "不适用"}</TableCell>
                       <TableCell>
@@ -233,7 +239,7 @@ export function PromptLibrary({ onPromptSelect, currentLanguage }: PromptLibrary
                 })
               ) : (
                 <TableRow>
-                    <TableCell colSpan={8} className="text-center">
+                    <TableCell colSpan={9} className="text-center">
                         未找到提示。
                     </TableCell>
                 </TableRow>

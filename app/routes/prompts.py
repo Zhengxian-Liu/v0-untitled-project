@@ -17,6 +17,7 @@ from app.models.user import User as UserModel
 router = APIRouter()
 PROMPT_COLLECTION = "prompts"
 HISTORY_COLLECTION = "prompt_history"
+EVALUATION_SESSIONS_COLLECTION = "evaluation_sessions"
 
 logger = logging.getLogger(__name__)
 
@@ -50,6 +51,45 @@ async def _ensure_unique_production_prompt(
         )
         if update_result.modified_count > 0:
             logger.info(f"Set isProduction=False for {update_result.modified_count} other prompts in project '{project}' / language '{language}'.")
+
+# Helper function to get latest average score for a prompt version
+async def get_latest_average_score_for_prompt(db: AsyncIOMotorDatabase, prompt_version_id: PyObjectId) -> Optional[float]:
+    pipeline = [
+        {
+            "$unwind": "$results"
+        },
+        {
+            "$match": {
+                "results.promptId": prompt_version_id,
+                "results.score": {"$ne": None}
+            }
+        },
+        {
+            "$group": {
+                "_id": "$_id", 
+                "session_saved_at": {"$first": "$saved_at"},
+                "scores_for_prompt_in_session": {"$push": "$results.score"}
+            }
+        },
+        {
+            "$sort": {"session_saved_at": -1}
+        },
+        {
+            "$limit": 1
+        },
+        {
+            "$project": {
+                "_id": 0,
+                "average_score": {"$avg": "$scores_for_prompt_in_session"}
+            }
+        }
+    ]
+    
+    aggregation_result = await db[EVALUATION_SESSIONS_COLLECTION].aggregate(pipeline).to_list(length=1)
+    
+    if aggregation_result and "average_score" in aggregation_result[0] and aggregation_result[0]["average_score"] is not None:
+        return float(aggregation_result[0]["average_score"])
+    return None
 
 @router.post(
     "/",
@@ -123,26 +163,29 @@ async def read_prompts(
     limit: int = 100,
     current_user: UserModel = Depends(get_current_active_user)
 ):
-    """Retrieve the latest version of all prompts with pagination."""
-    # --- Filter by user language --- M
+    """Retrieve the latest version of all prompts with pagination, including their latest average scores from the most recent evaluation session."""
     find_filter = {
         "is_latest": True,
         "language": current_user.language,
-        "is_deleted": {"$ne": True} # Include if False or field doesn't exist
+        "is_deleted": {"$ne": True}
     }
     logger.info(f"---> read_prompts: Using filter: {find_filter}")
-    prompts_cursor = db[PROMPT_COLLECTION].find(find_filter).skip(skip).limit(limit)
-    # --- End filter ---
+    prompts_cursor = db[PROMPT_COLLECTION].find(find_filter).skip(skip).limit(limit).sort("updated_at", -1)
     prompts_raw = await prompts_cursor.to_list(length=limit)
     logger.info(f"---> read_prompts: Found {len(prompts_raw)} raw prompt documents.")
 
+    prompts_with_scores_raw = []
+    for doc in prompts_raw:
+        doc["latest_score"] = await get_latest_average_score_for_prompt(db, doc["_id"])
+        prompts_with_scores_raw.append(doc)
+
     validated_prompts = []
-    for raw_prompt in prompts_raw:
+    for raw_prompt in prompts_with_scores_raw:
         try:
             validated_prompts.append(Prompt.model_validate(raw_prompt))
         except Exception as e:
-            logger.error(f"Failed to validate prompt document with _id {raw_prompt.get('_id')}: {e}")
-    logger.info(f"---> read_prompts: Returning {len(validated_prompts)} validated prompts.")
+            logger.error(f"Failed to validate prompt document with _id {raw_prompt.get('_id')}: {e} --- Document: {raw_prompt}")
+    logger.info(f"---> read_prompts: Returning {len(validated_prompts)} validated prompts with scores.")
     return validated_prompts
 
 
@@ -422,7 +465,7 @@ async def get_prompt_versions(
     db: AsyncIOMotorDatabase = Depends(get_database),
     current_user: UserModel = Depends(get_current_active_user)
 ):
-    """Retrieve all versions for a given base prompt ID, sorted newest first by creation date."""
+    """Retrieve all versions for a given base prompt ID, sorted newest first by creation date, including their latest average scores from the most recent evaluation session."""
     logger.info(f"---> get_prompt_versions: Received base_prompt_id: {base_prompt_id} (Type: {type(base_prompt_id)}) from URL")
     # --- ADDED Language Check ---
     # Need to check the language of *any* non-deleted version associated with this base_prompt_id
@@ -468,16 +511,15 @@ async def get_prompt_versions(
         )
 
     logger.info(f"---> get_prompt_versions: Starting validation loop for {len(versions_raw)} documents.")
-    # Validate each version document
-    validated_versions = []
+    # Validate each version document and fetch latest score
+    validated_versions_with_scores = []
     for doc in versions_raw:
+        doc["latest_score"] = await get_latest_average_score_for_prompt(db, doc["_id"])
         try:
-            validated_versions.append(Prompt.model_validate(doc))
+            validated_versions_with_scores.append(Prompt.model_validate(doc))
         except Exception as e:
-            # Log the specific document that failed validation
             logger.error(f"---> get_prompt_versions: Failed validation for doc _id={doc.get('_id')}: {e} --- Document: {doc}")
-            # Skip invalid docs for this response
 
-    logger.info(f"---> get_prompt_versions: Finished validation. Returning {len(validated_versions)} validated versions.")
-    return validated_versions
+    logger.info(f"---> get_prompt_versions: Finished validation. Returning {len(validated_versions_with_scores)} validated versions with scores.")
+    return validated_versions_with_scores
 # --- End NEW Endpoint --- 

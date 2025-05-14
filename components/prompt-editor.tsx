@@ -670,6 +670,8 @@ export function PromptEditor({ prompt, onSaveSuccess, currentLanguage }: PromptE
       context: "Context",
       instructions: "Instructions",
       examples: "Examples",
+      output: "Output_Requirements",
+      constraints: "Constraints",
     };
 
     const lower = (typeId || "").toLowerCase();

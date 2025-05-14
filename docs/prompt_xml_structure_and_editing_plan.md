@@ -58,11 +58,14 @@ Each editable section in a prompt will be represented by an object with the foll
 
 *   **Editable Sections:**
     *   The UI will continue to display section type names in Chinese (e.g., "角色定义" from `sectionTypes`).
-    *   A mapping will be required from `typeId` (e.g., "role") to the actual XML tag name used in the assembled prompt. This mapping must account for the workspace language.
-    *   **Tag Name Generation:**
+    *   A mapping will be required from `typeId` (e.g., "role") to the actual XML tag name used in the assembled prompt.
+    *   **Tag Name Generation (Current Simplified Approach - Phase 2):**
+        *   All `typeId`s will be converted to PascalCase English tag names (e.g., "role" -> "Role_Definition", "custom" -> "Custom_Section", "instructions" -> "Instructions").
+        *   The `language` parameter in the assembler will be noted but not used for tag generation in this phase.
+    *   **Tag Name Generation (Future - Post Phase 2):**
         *   For English workspaces: Convert `typeId` to PascalCase (e.g., "role" -> "Role_Definition", "custom" -> "Custom_Section"). A specific mapping might be needed if simple case conversion is not sufficient or if names differ significantly.
         *   For non-ASCII workspaces (e.g., Chinese): The `typeId` will be mapped to an ASCII-compatible string. For example, "角色定义" (typeId: "role") could become `<role_definition_zh>` or a chosen English equivalent like `<Role_Definition_Localized_Context_CN>`. A clear, consistent convention is needed. The simplest approach is to use the English-equivalent tag name (e.g. "Role_Definition") and potentially add a language attribute if ever needed, but the user specified tags should be in the workspace language, meaning an ASCII representation for non-ASCII. For instance, "角色定义" (`role`) in a Chinese workspace could be `jue_se_ding_yi`.
-        *   A lookup mechanism: `(typeId, language) -> tagNameString`.
+        *   A lookup mechanism: `(typeId, language) -> tagNameString` will be fully implemented.
 *   **Non-Editable Template Sections:**
     *   Tags within predefined, non-editable prompt templates (e.g., `<OUTPUT_REQUIREMENTS>`, `<TASK_INFO_TEMPLATE>` from `prompt_templates.py`) will *always* remain in English in the assembled prompt, regardless of the workspace language.
 
@@ -89,7 +92,7 @@ This will likely involve changing `PromptSection` in `app/models/prompt.py` to m
     2.  Iterate through the sorted section objects.
     3.  For each section:
         *   Retrieve its `typeId` and `content`.
-        *   Determine the correct XML tag name using the mapping/convention defined in 2.2 based on `typeId` and workspace language.
+        *   Determine the correct XML tag name. **For Phase 2, this will be an English PascalCase version of the `typeId` (e.g., "role" becomes "Role_Definition"), irrespective of the workspace language.** The `language` parameter will be available for future internationalized tag generation.
         *   Construct the XML string: `<Generated_Tag_Name>${section.content}</Generated_Tag_Name>`.
     4.  Concatenate the XML strings for all user-defined sections.
     5.  Integrate non-editable template parts: Prepend or append the content of fixed templates (like `FIXED_OUTPUT_REQUIREMENT_TEMPLATE` from `prompt_templates.py`) using their predefined English XML tags. The relative order of user sections vs. template sections needs to be defined (e.g., fixed templates first, then user sections).

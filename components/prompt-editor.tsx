@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Button } from "@/components/ui/button"
@@ -41,6 +41,8 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { apiClient } from "@/lib/apiClient"
 import { PredefinedTemplate, predefinedSectionTemplates } from "@/lib/prompt-templates"
+import { v4 as uuidv4 } from 'uuid'
+import { TagPalette } from "@/components/TagPalette"
 
 // +++ ADD: Type for fetched prompt structure M +++
 type PromptStructure = {
@@ -90,8 +92,6 @@ const snippets: Snippet[] = [
     text: "请对任何文化参考进行调整，使其适合目标受众，同时保持原文含义。",
   },
 ]
-
-const availableTags = ["技术", "营销", "法律", "对话", "正式", "休闲"]
 
 const availableProjects = [
   { id: "genshin", name: "原神" },
@@ -201,12 +201,11 @@ export function PromptEditor({ prompt, onSaveSuccess, currentLanguage }: PromptE
   const [description, setDescription] = useState("")
   const [selectedProject, setSelectedProject] = useState<string | undefined>(undefined)
   const [isProduction, setIsProduction] = useState(false)
-  const [selectedTags, setSelectedTags] = useState<string[]>([])
   const [version, setVersion] = useState("1.0")
-  const [sections, setSections] = useState<PromptSection[]>([
-    { id: "1", type: "role", name: "角色定义", content: "" },
-    { id: "2", type: "context", name: "上下文", content: "" },
-    { id: "3", type: "instructions", name: "说明", content: "" },
+  const [sections, setSections] = useState<PromptSection[]>(() => [
+    { id: uuidv4(), typeId: "role", name: "角色定义", content: "", order: 0 },
+    { id: uuidv4(), typeId: "context", name: "上下文", content: "", order: 1 },
+    { id: uuidv4(), typeId: "instructions", name: "说明", content: "", order: 2 },
   ])
   const [showSaveSectionDialog, setShowSaveSectionDialog] = useState(false)
   const [sectionToSave, setSectionToSave] = useState<PromptSection | null>(null)
@@ -267,7 +266,6 @@ export function PromptEditor({ prompt, onSaveSuccess, currentLanguage }: PromptE
       setName(prompt.name || "")
       setDescription(prompt.description || "")
       setSections(prompt.sections && prompt.sections.length > 0 ? prompt.sections : [])
-      setSelectedTags(prompt.tags || [])
       setSelectedProject(prompt.project)
       setIsProduction(prompt.isProduction || false)
       setVersion(prompt.version || "1.0")
@@ -282,17 +280,16 @@ export function PromptEditor({ prompt, onSaveSuccess, currentLanguage }: PromptE
       }
       // --- End fetch --- M
     } else {
-      // Reset form for new prompt (set default sections)
+      // Reset form for new prompt (set default sections with new structure)
       setName("")
       setDescription("")
       setIsProduction(false)
-      setSelectedTags([])
       setSelectedProject(undefined)
       setVersion("1.0")
       setSections([
-        { id: "1", type: "role", name: "角色定义", content: "" },
-        { id: "2", type: "context", name: "上下文", content: "" },
-        { id: "3", type: "instructions", name: "说明", content: "" },
+        { id: uuidv4(), typeId: "role", name: "角色定义", content: "", order: 0 },
+        { id: uuidv4(), typeId: "context", name: "上下文", content: "", order: 1 },
+        { id: uuidv4(), typeId: "instructions", name: "说明", content: "", order: 2 },
       ])
       // --- Clear loaded ID for new prompt --- M
       setCurrentlyLoadedVersionId(null);
@@ -354,7 +351,6 @@ export function PromptEditor({ prompt, onSaveSuccess, currentLanguage }: PromptE
     setName(selectedPrompt.name || "");
     setDescription(selectedPrompt.description || "");
     setSections(selectedPrompt.sections && selectedPrompt.sections.length > 0 ? selectedPrompt.sections : []);
-    setSelectedTags(selectedPrompt.tags || []);
     setSelectedProject(selectedPrompt.project);
     setIsProduction(selectedPrompt.isProduction || false);
     setVersion(selectedPrompt.version || "?.?"); // Update displayed version
@@ -366,14 +362,6 @@ export function PromptEditor({ prompt, onSaveSuccess, currentLanguage }: PromptE
   };
   // --- End Version Select Handler ---
 
-  const handleTagToggle = (tag: string) => {
-    if (selectedTags.includes(tag)) {
-      setSelectedTags(selectedTags.filter((t) => t !== tag))
-    } else {
-      setSelectedTags([...selectedTags, tag])
-    }
-  }
-
   const handleTemplateSelect = (template: Template) => {
     // When selecting a template, replace the first section with the template text
     if (sections.length > 0) {
@@ -381,7 +369,14 @@ export function PromptEditor({ prompt, onSaveSuccess, currentLanguage }: PromptE
       newSections[0].content = template.text
       setSections(newSections)
     } else {
-      setSections([{ id: "1", type: "instructions", name: "说明", content: template.text }])
+      // Corrected to use new PromptSection structure
+      setSections([{
+        id: uuidv4(), // Generate new UUID
+        typeId: "instructions", // Use typeId
+        name: "说明", // Default name for instructions
+        content: template.text,
+        order: 0 // Set order
+      }])
     }
   }
 
@@ -411,15 +406,15 @@ export function PromptEditor({ prompt, onSaveSuccess, currentLanguage }: PromptE
     )
   }
 
-  const handleSectionTypeChange = (sectionId: string, type: string) => {
+  const handleSectionTypeChange = (sectionId: string, newTypeId: string) => {
     setSections(
       sections.map((section) => {
         if (section.id === sectionId) {
-          const sectionType = sectionTypes.find((t) => t.id === type)
+          const sectionTypeInfo = sectionTypes.find((st) => st.id === newTypeId)
           return {
             ...section,
-            type,
-            name: type === "custom" ? section.name : sectionType?.name || section.name,
+            typeId: newTypeId,
+            name: newTypeId === "custom" ? section.name : sectionTypeInfo?.name || section.name,
           }
         }
         return section
@@ -439,8 +434,14 @@ export function PromptEditor({ prompt, onSaveSuccess, currentLanguage }: PromptE
   }
 
   const handleAddSection = () => {
-    const newId = Date.now().toString()
-    setSections([...sections, { id: newId, type: "custom", name: "新部分", content: "" }])
+    const newSection: PromptSection = {
+      id: uuidv4(),
+      typeId: "custom",
+      name: "新部分",
+      content: "",
+      order: sections.length,
+    };
+    setSections([...sections, newSection]);
   }
 
   const handleDeleteSection = (sectionId: string) => {
@@ -475,16 +476,14 @@ export function PromptEditor({ prompt, onSaveSuccess, currentLanguage }: PromptE
   }
 
   const handleInsertSavedSection = (savedSection: SavedSection) => {
-    const newId = Date.now().toString()
-    setSections([
-      ...sections,
-      {
-        id: newId,
-        type: savedSection.type,
-        name: savedSection.name,
-        content: savedSection.content,
-      },
-    ])
+    const newSection: PromptSection = {
+      id: uuidv4(),
+      typeId: savedSection.type,
+      name: savedSection.name,
+      content: savedSection.content,
+      order: sections.length,
+    };
+    setSections([...sections, newSection]);
     setShowInsertSectionDialog(false)
   }
 
@@ -545,13 +544,14 @@ export function PromptEditor({ prompt, onSaveSuccess, currentLanguage }: PromptE
   };
 
   const assembleSystemPromptPreview = () => {
-    const rules = sections
-      .map((section) => `### ${section.name}\n${section.content}`)
+    const rulesXml = sections
+      .map((section) => {
+        const tag = getSectionTag(section);
+        return `<${tag}>\n${section.content}\n</${tag}>`;
+      })
       .join("\n\n");
-    // Combine and highlight
-    // +++ UPDATE: Use fetched template M +++
-    const fullSystemPrompt = `${rules}\n\n${promptStructure?.output_requirement || "加载输出要求时出错..."}`;
-    // +++ END UPDATE +++
+
+    const fullSystemPrompt = `${rulesXml}\n\n${promptStructure?.output_requirement || "加载输出要求时出错..."}`;
     console.log("Assembled System Prompt Preview:", fullSystemPrompt);
     return highlightVariables(fullSystemPrompt);
   };
@@ -588,7 +588,6 @@ export function PromptEditor({ prompt, onSaveSuccess, currentLanguage }: PromptE
       name: name,
       description: description,
       sections: sections,
-      tags: selectedTags,
       project: selectedProject || null,
       language: currentLanguage,
       isProduction: isProduction,
@@ -660,6 +659,92 @@ export function PromptEditor({ prompt, onSaveSuccess, currentLanguage }: PromptE
     toast.info(`模板 "${template.name}" 已插入。`);
   };
   // +++ END ADD +++
+
+  // ---------------------------------------------------------------------------
+  // Helper: map section typeId + language to XML tag name
+  // Keep in sync with backend logic (app/core/prompt_assembler._tag_name).
+  // ---------------------------------------------------------------------------
+  const getTagName = (typeId: string, language: string = "en"): string => {
+    const mappingEn: Record<string, string> = {
+      role: "Role_Definition",
+      context: "Context",
+      instructions: "Instructions",
+      examples: "Examples",
+      output: "Output_Requirements",
+      constraints: "Constraints",
+    };
+
+    const lower = (typeId || "").toLowerCase();
+
+    if (mappingEn[lower]) return mappingEn[lower];
+
+    // For custom/unknown types, derive from the provided name later by caller.
+    return ""; // Caller should handle fallback.
+  };
+
+  const sanitizeTagName = (raw: string): string => {
+    // Replace non-alphanumerics with underscore, collapse, ensure leading letter
+    let tag = raw.trim().replace(/[^0-9a-zA-Z]+/g, "_").replace(/_+/g, "_").replace(/^_+|_+$/g, "");
+    if (!tag || !/^[A-Za-z]/.test(tag)) tag = `C_${tag}`;
+    return tag || "Custom_Section";
+  };
+
+  const getSectionTag = (sec: PromptSection): string => {
+    const mapped = getTagName(sec.typeId, currentLanguage);
+    return mapped || sanitizeTagName(sec.name);
+  };
+
+  // Compute dynamic tags from current sections (unique list)
+  const dynamicTags = Array.from(new Set(sections.map(getSectionTag)));
+
+  // Update fixedTags when promptStructure changes
+  useEffect(() => {
+    if (promptStructure) {
+      const tags = [
+        ...extractTags(promptStructure.output_requirement),
+        ...extractTags(promptStructure.task_info),
+      ];
+      setFixedTags([...new Set(tags)]);
+    }
+  }, [promptStructure]);
+
+  // --- Textarea refs and insertion logic ---
+  const textAreaRefs = useRef<Record<string, HTMLTextAreaElement | null>>({});
+  const [activeSectionId, setActiveSectionId] = useState<string | null>(null);
+
+  const handleTagInsert = (tagStr: string) => {
+    if (!activeSectionId) return;
+    const ta = textAreaRefs.current[activeSectionId];
+    if (!ta) return;
+    const start = ta.selectionStart ?? ta.value.length;
+    const end = ta.selectionEnd ?? ta.value.length;
+    const before = ta.value.slice(0, start);
+    const after = ta.value.slice(end);
+    const newVal = `${before}${tagStr}${after}`;
+    ta.value = newVal;
+    // Update state
+    setSections(
+      sections.map((sec) =>
+        sec.id === activeSectionId ? { ...sec, content: newVal } : sec
+      )
+    );
+    // Restore caret after inserted tag
+    const caretPos = start + tagStr.length;
+    requestAnimationFrame(() => {
+      ta.focus();
+      ta.setSelectionRange(caretPos, caretPos);
+    });
+  };
+
+  // --- Fixed-template tag handling ---
+  const [fixedTags, setFixedTags] = useState<string[]>([]);
+
+  // Helper to extract all XML opening tag names from a template string
+  const extractTags = (str: string): string[] => {
+    if (!str) return [];
+    const matches = Array.from(str.matchAll(/<([A-Za-z][\w\-]*)>/g)).map((m) => m[1]);
+    return [...new Set(matches)];
+  };
 
   return (
     <div className="space-y-6">
@@ -859,7 +944,7 @@ export function PromptEditor({ prompt, onSaveSuccess, currentLanguage }: PromptE
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2 flex-1">
                       <Select
-                        value={section.type}
+                        value={section.typeId}
                         onValueChange={(value) => handleSectionTypeChange(section.id, value)}
                       >
                         <SelectTrigger className="w-[180px]">
@@ -874,15 +959,27 @@ export function PromptEditor({ prompt, onSaveSuccess, currentLanguage }: PromptE
                         </SelectContent>
                       </Select>
 
-                      {section.type === "custom" && (
-                        <Input
-                          value={section.name}
-                          onChange={(e) => handleSectionNameChange(section.id, e.target.value)}
-                          placeholder="部分名称"
-                          className="flex-1"
-                        />
+                      {section.typeId === "custom" && (
+                        <div className="flex items-center gap-2 flex-1">
+                          <Input
+                            value={section.name}
+                            onChange={(e) => handleSectionNameChange(section.id, e.target.value)}
+                            placeholder="部分名称"
+                            className="flex-1"
+                          />
+                          <Badge variant="secondary" className="text-[10px] font-mono px-2 whitespace-nowrap">
+                            {`<${getSectionTag(section)}>`}
+                          </Badge>
+                        </div>
                       )}
-                      {section.type !== "custom" && <CardTitle className="text-base">{section.name}</CardTitle>}
+                      {section.typeId !== "custom" && (
+                        <div className="flex items-center gap-2">
+                          <CardTitle className="text-base">{section.name}</CardTitle>
+                          <Badge variant="secondary" className="text-[10px] font-mono px-2 whitespace-nowrap">
+                            {`<${getSectionTag(section)}>`}
+                          </Badge>
+                        </div>
+                      )}
                     </div>
 
                     <div className="flex items-center gap-1">
@@ -915,9 +1012,21 @@ export function PromptEditor({ prompt, onSaveSuccess, currentLanguage }: PromptE
                   <Textarea
                     value={section.content}
                     onChange={(e) => handleSectionContentChange(section.id, e.target.value)}
+                    onFocus={() => setActiveSectionId(section.id)}
+                    ref={(el) => {
+                      textAreaRefs.current[section.id] = el;
+                    }}
                     placeholder={`在此输入${section.name.toLowerCase()}...`}
                     className="font-mono min-h-[120px]"
                   />
+                  {/* Tag palette for this section */}
+                  <div className="mt-2 border rounded-md p-2 bg-muted/10">
+                    <TagPalette
+                      fixedTags={fixedTags}
+                      dynamicTags={dynamicTags}
+                      onInsert={(tag) => handleTagInsert(tag)}
+                    />
+                  </div>
                 </CardContent>
                 <CardFooter className="flex justify-end pt-0 gap-2">
                   <DropdownMenu>
@@ -925,14 +1034,14 @@ export function PromptEditor({ prompt, onSaveSuccess, currentLanguage }: PromptE
                       <Button
                         variant="ghost"
                         size="sm"
-                        disabled={!predefinedSectionTemplates[section.type] || predefinedSectionTemplates[section.type].length === 0}
+                        disabled={!predefinedSectionTemplates[section.typeId] || predefinedSectionTemplates[section.typeId].length === 0}
                       >
                         <Library className="mr-2 h-4 w-4" />
                         插入模板
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent>
-                      {(predefinedSectionTemplates[section.type] || []).map((template) => (
+                      {(predefinedSectionTemplates[section.typeId] || []).map((template) => (
                         <DropdownMenuItem
                           key={template.id}
                           onSelect={() => handlePredefinedTemplateInsert(template, section.id)}
@@ -941,7 +1050,7 @@ export function PromptEditor({ prompt, onSaveSuccess, currentLanguage }: PromptE
                           {template.name}
                         </DropdownMenuItem>
                       ))}
-                      {(!predefinedSectionTemplates[section.type] || predefinedSectionTemplates[section.type].length === 0) && (
+                      {(!predefinedSectionTemplates[section.typeId] || predefinedSectionTemplates[section.typeId].length === 0) && (
                          <DropdownMenuItem disabled>此部分类型无模板</DropdownMenuItem>
                       )}
                     </DropdownMenuContent>
@@ -975,22 +1084,6 @@ export function PromptEditor({ prompt, onSaveSuccess, currentLanguage }: PromptE
                   </Dialog>
                 </CardFooter>
               </Card>
-            ))}
-          </div>
-        </div>
-
-        <div className="grid gap-2">
-          <Label>标签</Label>
-          <div className="flex flex-wrap gap-2">
-            {availableTags.map((tag) => (
-              <Badge
-                key={tag}
-                variant={selectedTags.includes(tag) ? "default" : "outline"}
-                className="cursor-pointer"
-                onClick={() => handleTagToggle(tag)}
-              >
-                {tag}
-              </Badge>
             ))}
           </div>
         </div>

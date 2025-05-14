@@ -6,7 +6,6 @@ export type Prompt = {
   text?: string
   created_at: string
   updated_at: string
-  tags: string[]
   project?: string
   language?: string
   isProduction?: boolean
@@ -19,10 +18,11 @@ export type Prompt = {
 }
 
 export type PromptSection = {
-  id: string
-  type: string
-  name: string
-  content: string
+  id: string // Unique identifier for this section instance (UUID)
+  typeId: string // Identifier for the type of section (e.g., 'role', 'context'), maps to sectionTypes.id
+  name: string // Display name for the section type (e.g., '角色定义')
+  content: string // Content of the section, can include Markdown and textual XML tag references
+  order: number // Order of this section in the prompt sequence
 }
 
 export type SavedSection = {

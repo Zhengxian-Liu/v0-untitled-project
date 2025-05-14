@@ -12,6 +12,9 @@ from app.models.common import PyObjectId
 from app.models.prompt import Prompt, PromptCreate, PromptUpdate, PromptSection, BasePromptSummary
 from app.db.client import get_database
 from app.routes.auth import get_current_active_user
+# --- NEW: Prompt Assembler ---
+from app.core.prompt_assembler import assemble_prompt
+# -----------------------------
 from app.models.user import User as UserModel
 
 router = APIRouter()
@@ -124,7 +127,16 @@ async def create_prompt(
     # Ensure sections are present
     if "sections" not in prompt_dict:
         prompt_dict["sections"] = []
-    # Text is optional and not explicitly set here
+
+    # --- NEW: Assemble XML prompt text from sections ---
+    try:
+        # Use the original PromptSection objects from `prompt_in` to avoid re-parsing dicts
+        assembled_text = assemble_prompt(prompt_in.sections, current_user.language)
+        prompt_dict["text"] = assembled_text
+    except Exception as e:
+        logger.exception("Failed to assemble XML prompt text")
+        raise HTTPException(status_code=500, detail=f"Error assembling prompt XML: {e}")
+    # --- End Assembly ---
 
     # Check production uniqueness
     if prompt_dict.get("isProduction") is True:
@@ -331,6 +343,25 @@ async def save_new_version_from_existing(
     # Ensure sections are present if not explicitly provided in update
     if "sections" not in new_version_data:
          new_version_data["sections"] = base_version_doc.get("sections", []) # Copy from base if missing
+
+    # --- NEW: Assemble XML prompt text for the new version ---
+    try:
+        raw_sections = new_version_data["sections"]
+        # Ensure we have PromptSection objects
+        sections_models = []
+        for item in raw_sections:
+            if isinstance(item, PromptSection):
+                sections_models.append(item)
+            else:
+                # Assume dict-like
+                sections_models.append(PromptSection(**item))
+
+        assembled_text = assemble_prompt(sections_models, new_version_data.get("language", "en"))
+        new_version_data["text"] = assembled_text
+    except Exception as e:
+        logger.exception("Failed to assemble XML prompt text for new version")
+        raise HTTPException(status_code=500, detail=f"Error assembling prompt XML for new version: {e}")
+    # --- End Assembly ---
 
     # 5. Check production uniqueness for the NEW version
     if new_version_data.get("isProduction") is True:

@@ -23,6 +23,55 @@ from app.models.user import User as UserModel
 from app.services import judge_service
 from app.core.token_utils import estimate_token_count
 
+# +++ ADDED: XML Tag Generation Helpers +++
+# Mirrored from frontend logic
+
+def get_tag_name(type_id: str, language: str = "en") -> str:
+    # For now, only English tags are defined, mirroring frontend.
+    # Expand with language-specific mappings if needed.
+    mapping_en = {
+        "role": "Role_Definition",
+        "context": "Context",
+        "instructions": "Instructions",
+        "examples": "Examples",
+        "output": "Output_Requirements", # Corresponds to 'output' typeId
+        "constraints": "Constraints",     # Corresponds to 'constraints' typeId
+        # Add other predefined typeIds here if they have fixed tag names
+    }
+    # Ensure type_id is treated as string and lowercased for matching
+    lower_type_id = str(type_id).lower() if type_id else ""
+    return mapping_en.get(lower_type_id, "")
+
+def sanitize_tag_name(raw_name: str) -> str:
+    if not raw_name or not isinstance(raw_name, str):
+        return "Custom_Section" # Default if raw_name is None or not a string
+    
+    # Replace non-alphanumerics (excluding underscore) with underscore
+    tag = "".join(c if c.isalnum() or c == '_' else '_' for c in raw_name.strip())
+    
+    # Collapse multiple underscores
+    import re
+    tag = re.sub(r'_+', '_', tag)
+    
+    # Remove leading/trailing underscores
+    tag = tag.strip('_')
+    
+    # Ensure leading character is a letter, prepend C_ if not or if empty after sanitizing
+    if not tag or not tag[0].isalpha():
+        tag = f"C_{tag}" if tag else "C_Custom_Section" # Ensure C_ is added if tag became empty
+        
+    return tag if tag else "Custom_Section" # Final fallback
+
+def get_section_tag(section_type_id: str, section_name: str, language: str = "en") -> str:
+    # section is expected to have typeId and name
+    # In Python, we'll pass them as separate arguments for clarity
+    mapped_tag = get_tag_name(section_type_id, language)
+    if mapped_tag:
+        return mapped_tag
+    return sanitize_tag_name(section_name)
+
+# +++ END ADDED: XML Tag Generation Helpers +++
+
 router = APIRouter()
 EVAL_COLLECTION = "evaluations"
 RESULTS_COLLECTION = "evaluation_results"
@@ -72,7 +121,22 @@ async def run_single_prompt_evaluation_task(
     try:
         prompt_model = Prompt.model_validate(prompt_record)
         prompt_sections = prompt_model.sections if prompt_model.sections else []
-        rules_text = "\n\n".join([f"### {sec.name}\n{sec.content}" for sec in prompt_sections])
+        
+        # --- NEW XML-based Assembly --- M
+        if prompt_sections:
+            xml_rules_parts = []
+            for sec in prompt_sections:
+                # Assuming sec is an object with attributes typeId, name, content
+                # The Pydantic model for PromptSection should ensure these attributes exist.
+                # If sections come directly from MongoDB dicts, ensure keys match 'typeId', 'name', 'content'.
+                # From your provided example, they are indeed typeId, name, content.
+                tag = get_section_tag(sec.typeId, sec.name, prompt_model.language or "en") 
+                xml_rules_parts.append(f"<{tag}>\n{sec.content}\n</{tag}>")
+            rules_text = "\n\n".join(xml_rules_parts)
+        else:
+            rules_text = "" # No sections, so no rules text.
+        # --- END NEW XML-based Assembly --- M
+            
         system_prompt = f"{rules_text}\n\n{FIXED_OUTPUT_REQUIREMENT_TEMPLATE}"
     except Exception as prompt_parse_err:
         logger.error(f"Failed to parse prompt record or assemble system prompt for {prompt_id}: {prompt_parse_err}", exc_info=True)

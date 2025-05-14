@@ -97,6 +97,68 @@ interface EvaluationRequestData {
 const SELECT_PLACEHOLDER_VALUE = "--none--";
 const NOT_APPLICABLE_VALUE = "--not-applicable--"; // For mapping dropdowns
 
+// +++ ADD: Type for fetched prompt structure (copied from prompt-editor) M +++
+type PromptStructure = {
+  output_requirement: string;
+  task_info: string;
+  // character_info?: string; // Add later if needed
+}
+// +++ END ADD +++
+
+// +++ ADD: Copied KNOWN_VARIABLES and variableRegex from PromptEditor M +++
+const KNOWN_VARIABLES = [
+    "{SOURCE_TEXT}", "{TARGET_LANGUAGE}", "{PREVIOUS_CONTEXT}", "{FOLLOWING_CONTEXT}", 
+    "{TERMINOLOGY}", "{SIMILAR_TRANSLATIONS}", "{ADDITIONAL_INSTRUCTIONS}", 
+    "{nameChs}", "{name}", "{gender}", "{age}", "{occupation}", 
+    "{faction}", "{personality}", "{speakingStyle}", "{sampleDialogue}", "{writingStyle}" 
+];
+const variableRegex = new RegExp(`(${KNOWN_VARIABLES.map(v => v.replace(/[-\\/\\^$*+?.()|[\]{}]/g, '\\\\$&')).join('|')})`, 'g');
+// +++ END ADD +++
+
+// +++ ADD: Copied highlightVariables function from PromptEditor M +++
+// Helper function to highlight variables in text
+const highlightVariables = (text: string): React.ReactNode => {
+  if (!text) return null;
+  const parts = text.split(variableRegex);
+  return parts.map((part, index) => {
+    if (KNOWN_VARIABLES.includes(part)) {
+      return (
+        <code key={index} className="bg-primary/10 text-primary font-semibold rounded px-1 py-0.5">{part}</code>
+      );
+    }
+    return part;
+  });
+};
+// +++ END ADD +++
+
+// +++ ADD: Copied TagName helper functions from PromptEditor M +++
+const getTagName = (typeId: string, language: string = "en"): string => {
+  const mappingEn: Record<string, string> = {
+    role: "Role_Definition",
+    context: "Context",
+    instructions: "Instructions",
+    examples: "Examples",
+    output: "Output_Requirements",
+    constraints: "Constraints",
+  };
+
+  const lower = (typeId || "").toLowerCase();
+  if (mappingEn[lower]) return mappingEn[lower];
+  return ""; 
+};
+
+const sanitizeTagName = (raw: string): string => {
+  let tag = raw.trim().replace(/[^0-9a-zA-Z]+/g, "_").replace(/_+/g, "_").replace(/^_+|_+$/g, "");
+  if (!tag || !/^[A-Za-z]/.test(tag)) tag = `C_${tag}`;
+  return tag || "Custom_Section";
+};
+
+const getSectionTag = (sec: { typeId: string; name: string; }, currentLanguage: string): string => { // Simplified sec type for this context
+  const mapped = getTagName(sec.typeId, currentLanguage);
+  return mapped || sanitizeTagName(sec.name);
+};
+// +++ END ADD +++
+
 export function EvaluationPanel({ currentLanguage }: EvaluationPanelProps) {
   const [selectedProject, setSelectedProject] = useState("genshin")
   const [showIdealOutputs, setShowIdealOutputs] = useState(false)
@@ -173,6 +235,12 @@ export function EvaluationPanel({ currentLanguage }: EvaluationPanelProps) {
   const [isLoadingUserTestSets, setIsLoadingUserTestSets] = useState(false);
   const [selectedUserTestSetId, setSelectedUserTestSetId] = useState<string | null>(null);
 
+  // +++ ADD: State for fetched backend templates M +++
+  const [promptStructure, setPromptStructure] = useState<PromptStructure | null>(null);
+  const [isLoadingStructure, setIsLoadingStructure] = useState(true);
+  const [structureError, setStructureError] = useState<string | null>(null);
+  // +++ END ADD +++
+
   // --- Fetch Prompts Effect --- M
   useEffect(() => {
     const fetchPrompts = async () => {
@@ -217,6 +285,29 @@ export function EvaluationPanel({ currentLanguage }: EvaluationPanelProps) {
   // Add currentLanguage as dependency if API filtering is added later
   }, []); // Run once on mount
   // --- End Fetch Prompts ---
+
+  // +++ ADD: Effect to fetch backend prompt structure M +++
+  useEffect(() => {
+    const fetchPromptStructure = async () => {
+      setIsLoadingStructure(true);
+      setStructureError(null);
+      try {
+        const data = await apiClient<PromptStructure>("/prompt-structure");
+        setPromptStructure(data);
+      } catch (err) {
+        console.error("获取提示结构时出错:", err);
+        const errorMsg = err instanceof Error ? err.message : "发生未知错误";
+        setStructureError(errorMsg);
+        toast.error(`加载提示结构失败： ${errorMsg}`);
+        setPromptStructure(null);
+      } finally {
+        setIsLoadingStructure(false);
+      }
+    };
+
+    fetchPromptStructure();
+  }, []); // Empty dependency array means run once on mount
+  // +++ END ADD +++
 
   // --- Function to Fetch Versions for a Column --- M
   const fetchVersionsForColumn = async (columnId: string, basePromptId: string | null) => {
@@ -360,21 +451,52 @@ export function EvaluationPanel({ currentLanguage }: EvaluationPanelProps) {
   };
 
   // Get prompt text by ID
-  const getPromptText = (versionId: string | null) => {
+  const getPromptText = (
+    versionId: string | null,
+    targetPromptStructure: PromptStructure | null,
+    activeLanguage: string
+  ) => {
        if (!versionId) return "未选择版本";
+       if (!targetPromptStructure) return "加载提示结构中...";
+
+       let promptToDisplay: Prompt | undefined;
+
+       // Find the prompt in column-specific available versions first
        for (const col of columns) {
-          const prompt = col.availableVersions?.find(p => p.id === versionId);
-          if (prompt?.sections && prompt.sections.length > 0) {
-             return prompt.sections.map(sec => `### ${sec.name}\n${sec.content}`).join('\n\n');
+          const p = col.availableVersions?.find(p => p.id === versionId);
+          if (p) {
+              promptToDisplay = p;
+              break;
           }
-          if (prompt?.text) return prompt.text;
        }
-       const latestPrompt = availablePrompts.find(p => p.id === versionId);
-       // Fallback logic as in getPromptInfo
-       if (latestPrompt?.sections && latestPrompt.sections.length > 0) {
-           return latestPrompt.sections.map(sec => `### ${sec.name}\n${sec.content}`).join('\n\n');
+
+       // Fallback to the general list of available prompts if not found in column versions
+       if (!promptToDisplay) {
+           promptToDisplay = availablePrompts.find(p => p.id === versionId);
        }
-       return latestPrompt?.text || "提示文本不可用";
+
+       if (!promptToDisplay) return "提示版本未找到。";
+
+       const sections = promptToDisplay.sections;
+
+       if (!sections || sections.length === 0) {
+           // If no sections, but there's a raw text field (legacy), show that.
+           // Otherwise, indicate sections are missing for a proper preview.
+           if (promptToDisplay.text) return highlightVariables(promptToDisplay.text);
+           return "(此提示版本无内容部分)";
+       }
+
+       const rulesXml = sections
+        .map((section) => {
+          // Ensure section has typeId and name for getSectionTag
+          const secForTag = { typeId: section.typeId, name: section.name };
+          const tag = getSectionTag(secForTag, activeLanguage);
+          return `<${tag}>\n${section.content}\n</${tag}>`;
+        })
+        .join("\n\n");
+
+      const fullSystemPrompt = `${rulesXml}\n\n${targetPromptStructure.output_requirement || "加载输出要求时出错..."}`;
+      return highlightVariables(fullSystemPrompt);
   };
 
   // Get model name by ID
@@ -1118,7 +1240,9 @@ export function EvaluationPanel({ currentLanguage }: EvaluationPanelProps) {
                       {column.showPrompt && (
                         <ScrollArea className="h-[100px] w-full rounded-md border bg-muted/50 mt-2 p-2">
                            <p className="text-xs font-mono whitespace-pre-wrap">
-                               {getPromptText(column.selectedVersionId)}
+                               {/* +++ UPDATE: Pass new args to getPromptText M +++ */}
+                               {getPromptText(column.selectedVersionId, promptStructure, currentLanguage)}
+                               {/* +++ END UPDATE M +++ */}
                            </p>
                         </ScrollArea>
                       )}

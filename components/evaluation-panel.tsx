@@ -97,6 +97,7 @@ interface EvaluationRequestData {
 const SELECT_PLACEHOLDER_VALUE = "--none--";
 const NOT_APPLICABLE_VALUE = "--not-applicable--"; // For mapping dropdowns
 
+
 // +++ ADD: Type for fetched prompt structure (copied from prompt-editor) M +++
 type PromptStructure = {
   output_requirement: string;
@@ -158,6 +159,8 @@ const getSectionTag = (sec: { typeId: string; name: string; }, currentLanguage: 
   return mapped || sanitizeTagName(sec.name);
 };
 // +++ END ADD +++
+
+
 
 export function EvaluationPanel({ currentLanguage }: EvaluationPanelProps) {
   const [selectedProject, setSelectedProject] = useState("genshin")
@@ -235,11 +238,13 @@ export function EvaluationPanel({ currentLanguage }: EvaluationPanelProps) {
   const [isLoadingUserTestSets, setIsLoadingUserTestSets] = useState(false);
   const [selectedUserTestSetId, setSelectedUserTestSetId] = useState<string | null>(null);
 
-  // +++ ADD: State for fetched backend templates M +++
+
+ // +++ ADD: State for fetched backend templates M +++
   const [promptStructure, setPromptStructure] = useState<PromptStructure | null>(null);
   const [isLoadingStructure, setIsLoadingStructure] = useState(true);
   const [structureError, setStructureError] = useState<string | null>(null);
   // +++ END ADD +++
+
 
   // --- Fetch Prompts Effect --- M
   useEffect(() => {

@@ -12,6 +12,7 @@ import {
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import type React from "react"
 import type { User } from "@/types"
+import { availableLanguages } from "@/lib/constants"
 
 // --- Update Props: No longer needs setCurrentLanguage --- M
 interface MainNavProps {
@@ -23,18 +24,18 @@ interface MainNavProps {
 }
 
 // --- Define language list locally for display --- M
-const availableLanguages = [
-  { id: "en", name: "英语" },
-  { id: "ja", name: "日语" },
-  { id: "ko", name: "韩语" },
-  { id: "zh", name: "中文" },
-  { id: "fr", name: "法语" },
-  { id: "de", name: "德语" },
-  { id: "es", name: "西班牙语" },
-  { id: "it", name: "意大利语" },
-  { id: "ru", name: "俄语" },
-  { id: "pt", name: "葡萄牙语" },
-];
+// const availableLanguages = [
+//   { id: "en", name: "英语" },
+//   { id: "ja", name: "日语" },
+//   { id: "ko", name: "韩语" },
+//   { id: "zh", name: "中文" },
+//   { id: "fr", name: "法语" },
+//   { id: "de", name: "德语" },
+//   { id: "es", name: "西班牙语" },
+//   { id: "it", name: "意大利语" },
+//   { id: "ru", name: "俄语" },
+//   { id: "pt", name: "葡萄牙语" },
+// ];
 // --- End Define ---
 
 export function MainNav({ currentLanguage, user, logout }: MainNavProps) {

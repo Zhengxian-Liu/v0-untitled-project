@@ -5,6 +5,7 @@ anthropic
 pydantic[email]
 pydantic-settings
 python-dotenv
+requests
 
 # --- Auth Dependencies --- M
 passlib[bcrypt]

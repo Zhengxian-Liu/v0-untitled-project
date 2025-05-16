@@ -43,6 +43,7 @@ import { apiClient } from "@/lib/apiClient"
 import { PredefinedTemplate, predefinedSectionTemplates } from "@/lib/prompt-templates"
 import { v4 as uuidv4 } from 'uuid'
 import { TagPalette } from "@/components/TagPalette"
+import { availableLanguages, availableProjects } from "@/lib/constants"
 
 // +++ ADD: Type for fetched prompt structure M +++
 type PromptStructure = {
@@ -93,25 +94,6 @@ const snippets: Snippet[] = [
   },
 ]
 
-const availableProjects = [
-  { id: "genshin", name: "原神" },
-  { id: "honkai", name: "崩坏：星穹铁道" },
-  { id: "zenless", name: "绝区零" },
-]
-
-const availableLanguages = [
-  { id: "en", name: "英语" },
-  { id: "ja", name: "日语" },
-  { id: "ko", name: "韩语" },
-  { id: "zh", name: "中文" },
-  { id: "fr", name: "法语" },
-  { id: "de", name: "德语" },
-  { id: "es", name: "西班牙语" },
-  { id: "it", name: "意大利语" },
-  { id: "ru", name: "俄语" },
-  { id: "pt", name: "葡萄牙语" },
-]
-
 const sectionTypes = [
   { id: "role", name: "角色定义" },
   { id: "context", name: "上下文" },
@@ -120,7 +102,7 @@ const sectionTypes = [
   { id: "output", name: "输出要求" },
   { id: "constraints", name: "限制" },
   { id: "custom", name: "自定义部分" },
-]
+];
 
 // Mock saved sections that could be reused across prompts
 const mockSavedSections: SavedSection[] = [
@@ -164,24 +146,38 @@ const mockSavedSections: SavedSection[] = [
 const mockProductionPrompts: ProductionPrompt[] = [
   {
     id: "prod1",
-    project: "genshin",
-    language: "ja",
+    project: "hk4e",
+    language: "JA",
     promptId: "1",
     promptName: "技术文档翻译",
   },
   {
     id: "prod2",
-    project: "honkai",
-    language: "fr",
+    project: "rpg",
+    language: "FR",
     promptId: "2",
     promptName: "营销内容翻译",
   },
   {
     id: "prod3",
-    project: "zenless",
-    language: "es",
+    project: "blhz",
+    language: "ES",
     promptId: "3",
     promptName: "法律文件翻译",
+  },
+  {
+    id: "prod4",
+    project: "nxx",
+    language: "KO",
+    promptId: "4",
+    promptName: "角色对话翻译",
+  },
+  {
+    id: "prod5",
+    project: "bh3",
+    language: "DE",
+    promptId: "5",
+    promptName: "UI文本翻译",
   },
 ]
 
@@ -830,11 +826,6 @@ export function PromptEditor({ prompt, onSaveSuccess, currentLanguage }: PromptE
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value={SELECT_PLACEHOLDER_VALUE}>-- 无 --</SelectItem>
-                {availableProjects.map((project) => (
-                  <SelectItem key={project.id} value={project.id}>
-                    {project.name}
-                  </SelectItem>
-                ))}
               </SelectContent>
             </Select>
           </div>

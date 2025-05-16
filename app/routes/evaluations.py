@@ -8,6 +8,9 @@ from datetime import datetime
 import anthropic # For specific APIError handling
 import asyncio # For checking background task completion
 from pymongo import ReturnDocument
+import os
+import uuid
+from dotenv import load_dotenv
 
 from app.db.client import get_database
 from app.models.common import PyObjectId # Correct import path
@@ -18,6 +21,7 @@ from app.models.evaluation import (
     EvaluationInDB # Need this for the full data including test_set_data
 )
 from app.services.claude_service import generate_text_with_claude
+from app.services.tm_tb_client import TMTBClient, TMTBServiceError # Added TM/TB client import
 from app.routes.auth import get_current_active_user
 from app.models.user import User as UserModel
 from app.services import judge_service
@@ -79,6 +83,20 @@ PROMPT_COLLECTION = "prompts"
 
 logger = logging.getLogger(__name__)
 
+# Load environment variables from .env file
+load_dotenv()
+
+# --- TM/TB Client Configuration --- Initialized once if possible, or per task if secrets vary by project
+# For now, let's assume it can be initialized once or defaults are used.
+# These should be defined in your .env file or environment
+TM_TB_API_URL = os.getenv("TM_TB_API_URL")
+TM_TB_API_SECRET = os.getenv("TM_TB_API_SECRET")
+TM_TB_DEFAULT_PROJECT = os.getenv("TM_TB_DEFAULT_PROJECT", "hk4e") # Defaulting to hk4e as per plan
+
+# It's good practice to ensure critical configs are present at startup
+# However, for a background task, we might check them inside the task
+# or ensure the app doesn't start if they are missing.
+
 # --- Background Task (Modified) --- M
 
 async def run_single_prompt_evaluation_task(
@@ -92,6 +110,22 @@ async def run_single_prompt_evaluation_task(
     eval_collection = db[EVAL_COLLECTION]
     results_collection = db[RESULTS_COLLECTION]
     prompt_collection = db[PROMPT_COLLECTION]
+
+    # --- Initialize TM/TB Client --- 
+    tm_tb_client = None
+    if TM_TB_API_URL and TM_TB_API_SECRET:
+        try:
+            tm_tb_client = TMTBClient(
+                base_url=TM_TB_API_URL,
+                secret_key=TM_TB_API_SECRET,
+                default_project=TM_TB_DEFAULT_PROJECT
+            )
+            logger.info(f"TM/TB Client initialized for Eval ID: {evaluation_id}, Prompt ID: {prompt_id}")
+        except ValueError as ve:
+            logger.error(f"TM/TB Client failed to initialize due to missing URL/Secret: {ve}. TM/TB features will be skipped.")
+            tm_tb_client = None # Ensure it's None if initialization fails
+    else:
+        logger.warning("TM_TB_API_URL or TM_TB_API_SECRET not configured. TM/TB features will be skipped.")
 
     # 1. Use the passed test_set_data
     # Validate the structure? Assume it's correct for now.
@@ -173,14 +207,73 @@ async def run_single_prompt_evaluation_task(
             additional_instructions = item.additional_instructions if item.additional_instructions else "N/A"
             # --- End Contextual Data ---
 
+            # +++ TM/TB Integration Point +++
+            tm_tb_matches_list = []
+            terminology_str = "[]"
+            similar_translations_str = "[]"
+
+            if tm_tb_client:
+                try:
+                    # Parameters for TM/TB API Call
+                    # dataId and textId are random UUIDs for each segment
+                    current_data_id = str(uuid.uuid4())
+                    # srcLang is always CHS as per plan
+                    src_lang_tmtb = "CHS"
+                    # tarLang is from prompt_model.language
+                    tar_lang_tmtb = prompt_model.language or "EN" # Default to EN if not set
+                    # project ID needs to be determined (using default for now from TM_TB_DEFAULT_PROJECT)
+                    # This might need to be more dynamic based on prompt_model.project if available
+                    project_tmtb = prompt_model.project or TM_TB_DEFAULT_PROJECT
+                    if not project_tmtb: # Final fallback if prompt_model.project is also None/empty
+                        project_tmtb = "hk4e" # Fallback to a known default if TM_TB_DEFAULT_PROJECT is also not set effectively
+                        logger.warning(f"TM/TB Project ID not found in prompt or default, falling back to '{project_tmtb}'")
+
+                    logger.debug(f"Calling TM/TB Service for srcText: '{item.source_text[:30]}...', project: {project_tmtb}, srcLang: {src_lang_tmtb}, tarLang: {tar_lang_tmtb}")
+                    
+                    tm_tb_api_matches = tm_tb_client.match_resources(
+                        data_id=current_data_id,
+                        text_id=current_data_id, # Using same UUID for textId
+                        src_text=item.source_text,
+                        src_lang=src_lang_tmtb,
+                        tar_lang=tar_lang_tmtb,
+                        project=project_tmtb,
+                        tm_asset_ids=[] # Optional, sending empty list
+                    )
+                    logger.info(f"TM/TB Service returned {len(tm_tb_api_matches)} matches for srcText: '{item.source_text[:30]}...'")
+
+                    # Process and format TM/TB results
+                    tm_results = []
+                    tb_results = []
+                    for match in tm_tb_api_matches:
+                        match_type = match.get("type")
+                        src_content = match.get("srcLangContent", "")
+                        dest_content = match.get("destLangContent", "")
+                        if match_type == "tm":
+                            match_rate = match.get("matchRate", 0)
+                            tm_results.append(f"Source: {src_content}, Target: {dest_content}, Match: {match_rate}%")
+                        elif match_type == "tb":
+                            tb_results.append(f"Term: {src_content}, Target: {dest_content}")
+                        # else: ignore other types or log them
+                    
+                    if tm_results:
+                        similar_translations_str = "; ".join(tm_results)
+                    if tb_results:
+                        terminology_str = "; ".join(tb_results)
+
+                except TMTBServiceError as e:
+                    logger.error(f"TM/TB Service Error for {item.source_text[:30]}...: {e}. Proceeding without TM/TB data.")
+                except Exception as e:
+                    logger.error(f"Unexpected error during TM/TB call for {item.source_text[:30]}...: {e}. Proceeding without TM/TB data.", exc_info=True)
+            # +++ End TM/TB Integration Point +++
+
             # --- Assemble User Prompt for this item --- M
             user_prompt = TASK_INFO_TEMPLATE
             user_prompt = user_prompt.replace("{SOURCE_TEXT}", item.source_text)
             user_prompt = user_prompt.replace("{PREVIOUS_CONTEXT}", previous_context)
             user_prompt = user_prompt.replace("{FOLLOWING_CONTEXT}", following_context)
             user_prompt = user_prompt.replace("{TARGET_LANGUAGE}", prompt_model.language or "Unknown")
-            user_prompt = user_prompt.replace("{TERMINOLOGY}", "[]") # TODO
-            user_prompt = user_prompt.replace("{SIMILAR_TRANSLATIONS}", "[]") # TODO
+            user_prompt = user_prompt.replace("{TERMINOLOGY}", terminology_str) # Use fetched/formatted TB
+            user_prompt = user_prompt.replace("{SIMILAR_TRANSLATIONS}", similar_translations_str) # Use fetched/formatted TM
             user_prompt = user_prompt.replace("{ADDITIONAL_INSTRUCTIONS}", additional_instructions)
             # --- End User Prompt Assembly ---
 

@@ -9,22 +9,9 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from 'sonner';
+import { availableLanguages } from "@/lib/constants";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "/api/v1";
-
-// Use the same list as before, maybe centralize later
-const availableLanguages = [
-  { id: "en", name: "英语" },
-  { id: "ja", name: "日语" },
-  { id: "ko", name: "韩语" },
-  { id: "zh", name: "中文" },
-  { id: "fr", name: "法语" },
-  { id: "de", name: "德语" },
-  { id: "es", name: "西班牙语" },
-  { id: "it", name: "意大利语" },
-  { id: "ru", name: "俄语" },
-  { id: "pt", name: "葡萄牙语" },
-]
 
 export default function RegisterPage() {
     const [username, setUsername] = useState('');

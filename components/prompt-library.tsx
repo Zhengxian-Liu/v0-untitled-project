@@ -27,19 +27,11 @@ import {
 import { useToast } from "@/components/ui/use-toast"
 import type { Prompt, BasePromptSummary } from "@/types"
 import { apiClient } from "@/lib/apiClient"
+import { availableLanguages as baseAvailableLanguages, availableProjects as baseAvailableProjects } from "@/lib/constants"
 
 const availableLanguages = [
   { id: "all", name: "所有语言" },
-  { id: "en", name: "英语" },
-  { id: "ja", name: "日语" },
-  { id: "ko", name: "韩语" },
-  { id: "zh", name: "中文" },
-  { id: "fr", name: "法语" },
-  { id: "de", name: "德语" },
-  { id: "es", name: "西班牙语" },
-  { id: "it", name: "意大利语" },
-  { id: "ru", name: "俄语" },
-  { id: "pt", name: "葡萄牙语" },
+  ...baseAvailableLanguages,
 ]
 
 interface PromptLibraryProps {
@@ -49,9 +41,7 @@ interface PromptLibraryProps {
 
 const projects = [
   { id: "all", name: "所有项目" },
-  { id: "genshin", name: "原神" },
-  { id: "honkai", name: "崩坏：星穹铁道" },
-  { id: "zenless", name: "绝区零" },
+  ...baseAvailableProjects,
 ]
 
 export function PromptLibrary({ onPromptSelect, currentLanguage }: PromptLibraryProps) {

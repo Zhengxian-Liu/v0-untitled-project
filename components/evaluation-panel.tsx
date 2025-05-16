@@ -163,7 +163,7 @@ const getSectionTag = (sec: { typeId: string; name: string; }, currentLanguage: 
 
 
 export function EvaluationPanel({ currentLanguage }: EvaluationPanelProps) {
-  const [selectedProject, setSelectedProject] = useState("genshin")
+  const [selectedProject, setSelectedProject] = useState("hk4e")
   const [showIdealOutputs, setShowIdealOutputs] = useState(false)
   const [testSetType, setTestSetType] = useState("manual") // manual, upload_new, uploaded_existing
   const [selectedTestSet, setSelectedTestSet] = useState("1")
@@ -194,9 +194,11 @@ export function EvaluationPanel({ currentLanguage }: EvaluationPanelProps) {
 
   // Projects data
   const projects = [
-    { id: "genshin", name: "Genshin" },
-    { id: "honkai", name: "Honkai: Starrail" },
-    { id: "zenless", name: "Zenless Zone Zero" },
+    { id: "hk4e", name: "Genshin" },
+    { id: "rpg", name: "Honkai: Starrail" },
+    { id: "blhz", name: "Zenless Zone Zero" },
+    { id: "nxx", name: "未定事件簿" },
+    { id: "bh3", name: "崩坏3" },
   ]
 
   // --- State for Fetched Prompts --- M

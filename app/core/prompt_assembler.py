@@ -60,7 +60,7 @@ def assemble_prompt(sections: List[PromptSection], language: str = "en") -> str:
 # Helpers --------------------------------------------------------------------
 
 def _normalize_order(sections: List[PromptSection]) -> None:
-    """Ensure every section has an integer *order*; fill gaps in-place.«"""
+    """Ensure every section has an integer *order*; fill gaps in-place."""
     for idx, sec in enumerate(sections):
         if sec.order is None:
             sec.order = idx
